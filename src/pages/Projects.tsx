@@ -62,14 +62,12 @@ const Projects: React.FC = () => {
         ApiService.getData(STORAGE_KEYS.TEAM_MEMBERS)
       ]);
       
-      // サーバーのデータを優先的に使用（常に最新の状態を保持）
-      if (projectsResponse.data && Array.isArray(projectsResponse.data)) {
-        console.log('サーバーからの案件データを適用:', projectsResponse.data.length, '件');
+      // LocalStorageが空の場合のみサーバーのデータを使用
+      if (projectsResponse.data && (!LocalStorage.get(STORAGE_KEYS.PROJECTS_DATA) || LocalStorage.get(STORAGE_KEYS.PROJECTS_DATA)?.length === 0)) {
         setProjects(projectsResponse.data);
         LocalStorage.set(STORAGE_KEYS.PROJECTS_DATA, projectsResponse.data);
       }
-      if (membersResponse.data && Array.isArray(membersResponse.data)) {
-        console.log('サーバーからのチームメンバーデータを適用:', membersResponse.data.length, '件');
+      if (membersResponse.data && (!LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS) || LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS)?.length === 0)) {
         setTeamMembers(membersResponse.data);
         LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, membersResponse.data);
       }

@@ -53,14 +53,13 @@ const Tasks: React.FC = () => {
         ApiService.getData(STORAGE_KEYS.TEAM_MEMBERS)
       ]);
       
-      // サーバーのデータを優先的に使用（常に最新の状態を保持）
-      if (tasksResponse.data && Array.isArray(tasksResponse.data)) {
-        console.log('サーバーからのデータを適用:', tasksResponse.data.length, '件');
+      // LocalStorageが空の場合のみサーバーのデータを使用
+      // これにより、既存のローカルデータを保持しつつ、別ブラウザでもデータが表示される
+      if (tasksResponse.data && (!LocalStorage.get(STORAGE_KEYS.TASKS_DATA) || LocalStorage.get(STORAGE_KEYS.TASKS_DATA)?.length === 0)) {
         setTasks(tasksResponse.data);
         LocalStorage.set(STORAGE_KEYS.TASKS_DATA, tasksResponse.data);
       }
-      if (membersResponse.data && Array.isArray(membersResponse.data)) {
-        console.log('サーバーからのチームメンバーデータを適用:', membersResponse.data.length, '件');
+      if (membersResponse.data && (!LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS) || LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS)?.length === 0)) {
         setTeamMembers(membersResponse.data);
         LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, membersResponse.data);
       }
@@ -87,21 +86,12 @@ const Tasks: React.FC = () => {
 
   // データをサーバーに保存
   const saveDataToServer = async (dataType: string, data: any) => {
-    if (!isAuthenticated) {
-      console.warn('認証されていないため、サーバーへの保存をスキップ');
-      return;
-    }
+    if (!isAuthenticated) return;
     
     try {
-      console.log('サーバーへの保存を開始:', dataType, data.length || 'N/A', '件');
-      const result = await ApiService.saveData(dataType, data);
-      console.log('サーバーへの保存が成功しました:', dataType);
-      return result;
-    } catch (error: any) {
+      await ApiService.saveData(dataType, data);
+    } catch (error) {
       console.error('サーバーへのデータ保存エラー:', error);
-      console.error('エラー詳細:', error.response?.data || error.message);
-      // エラーを再スローして上位に伝播
-      throw error;
     }
   };
 
@@ -159,7 +149,7 @@ const Tasks: React.FC = () => {
     }
   };
 
-  const moveTask = async (taskId: number, newStatus: Task['status']) => {
+  const moveTask = (taskId: number, newStatus: Task['status']) => {
     const updatedTasks = tasks.map(task => 
       task.id === taskId ? { ...task, status: newStatus, updatedAt: new Date().toISOString() } : task
     );
@@ -167,14 +157,10 @@ const Tasks: React.FC = () => {
     LocalStorage.set(STORAGE_KEYS.TASKS_DATA, updatedTasks);
     
     // サーバーに保存
-    try {
-      await saveDataToServer(STORAGE_KEYS.TASKS_DATA, updatedTasks);
-    } catch (error) {
-      console.error('タスクの更新に失敗しましたが、LocalStorageには保存済みです');
-    }
+    saveDataToServer(STORAGE_KEYS.TASKS_DATA, updatedTasks);
   };
 
-  const addTask = async () => {
+  const addTask = () => {
     if (newTask.title && newTask.assignee && newTask.dueDate) {
       let updatedTasks;
       
@@ -219,18 +205,14 @@ const Tasks: React.FC = () => {
       LocalStorage.set(STORAGE_KEYS.TASKS_DATA, updatedTasks);
       
       // サーバーに保存
-      try {
-        await saveDataToServer(STORAGE_KEYS.TASKS_DATA, updatedTasks);
-      } catch (error) {
-        console.error('タスクの保存に失敗しましたが、LocalStorageには保存済みです');
-      }
+      saveDataToServer(STORAGE_KEYS.TASKS_DATA, updatedTasks);
       
       setNewTask({ status: 'pending', priority: 'medium', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       setShowAddTask(false);
     }
   };
 
-  const updateTask = async (taskId: number, updates: Partial<Task>) => {
+  const updateTask = (taskId: number, updates: Partial<Task>) => {
     const updatedTasks = tasks.map(task => 
       task.id === taskId ? { ...task, ...updates, updatedAt: new Date().toISOString() } : task
     );
@@ -238,14 +220,10 @@ const Tasks: React.FC = () => {
     LocalStorage.set(STORAGE_KEYS.TASKS_DATA, updatedTasks);
     
     // サーバーに保存
-    try {
-      await saveDataToServer(STORAGE_KEYS.TASKS_DATA, updatedTasks);
-    } catch (error) {
-      console.error('タスクの更新に失敗しましたが、LocalStorageには保存済みです');
-    }
+    saveDataToServer(STORAGE_KEYS.TASKS_DATA, updatedTasks);
   };
 
-  const deleteTask = async (taskId: number) => {
+  const deleteTask = (taskId: number) => {
     const task = tasks.find(t => t.id === taskId);
     if (task && window.confirm(`「${task.title}」のタスクを削除してもよろしいですか？`)) {
       const updatedTasks = tasks.filter(task => task.id !== taskId);
@@ -253,11 +231,7 @@ const Tasks: React.FC = () => {
       LocalStorage.set(STORAGE_KEYS.TASKS_DATA, updatedTasks);
       
       // サーバーに保存
-      try {
-        await saveDataToServer(STORAGE_KEYS.TASKS_DATA, updatedTasks);
-      } catch (error) {
-        console.error('タスクの削除に失敗しましたが、LocalStorageには保存済みです');
-      }
+      saveDataToServer(STORAGE_KEYS.TASKS_DATA, updatedTasks);
       
       setShowTaskDetail(null);
     }

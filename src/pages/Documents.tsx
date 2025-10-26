@@ -76,19 +76,16 @@ const Documents: React.FC = () => {
         ApiService.getData(STORAGE_KEYS.TEAM_MEMBERS)
       ]);
       
-      // サーバーのデータを優先的に使用（常に最新の状態を保持）
-      if (docsResponse.data && Array.isArray(docsResponse.data)) {
-        console.log('サーバーからの資料データを適用:', docsResponse.data.length, '件');
+      // LocalStorageが空の場合のみサーバーのデータを使用
+      if (docsResponse.data && (!LocalStorage.get(STORAGE_KEYS.DOCUMENTS_DATA) || LocalStorage.get(STORAGE_KEYS.DOCUMENTS_DATA)?.length === 0)) {
         setDocuments(docsResponse.data);
         LocalStorage.set(STORAGE_KEYS.DOCUMENTS_DATA, docsResponse.data);
       }
-      if (minutesResponse.data && Array.isArray(minutesResponse.data)) {
-        console.log('サーバーからの議事録データを適用:', minutesResponse.data.length, '件');
+      if (minutesResponse.data && (!LocalStorage.get(STORAGE_KEYS.MEETING_MINUTES) || LocalStorage.get(STORAGE_KEYS.MEETING_MINUTES)?.length === 0)) {
         setMeetingMinutes(minutesResponse.data);
         LocalStorage.set(STORAGE_KEYS.MEETING_MINUTES, minutesResponse.data);
       }
-      if (membersResponse.data && Array.isArray(membersResponse.data)) {
-        console.log('サーバーからのチームメンバーデータを適用:', membersResponse.data.length, '件');
+      if (membersResponse.data && (!LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS) || LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS)?.length === 0)) {
         setTeamMembers(membersResponse.data);
         LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, membersResponse.data);
       }
