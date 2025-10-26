@@ -148,12 +148,21 @@ const Dashboard: React.FC = () => {
 
   // データをサーバーに保存
   const saveDataToServer = async (dataType: string, data: any) => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      console.warn('認証されていないため、サーバーへの保存をスキップ');
+      return;
+    }
     
     try {
-      await ApiService.saveData(dataType, data);
-    } catch (error) {
+      console.log('サーバーへの保存を開始:', dataType, data.length || 'N/A', '件');
+      const result = await ApiService.saveData(dataType, data);
+      console.log('サーバーへの保存が成功しました:', dataType);
+      return result;
+    } catch (error: any) {
       console.error('サーバーへのデータ保存エラー:', error);
+      console.error('エラー詳細:', error.response?.data || error.message);
+      // エラーを再スローして上位に伝播
+      throw error;
     }
   };
 
@@ -240,14 +249,18 @@ const Dashboard: React.FC = () => {
     });
   };
 
-  const addSalesData = () => {
+  const addSalesData = async () => {
     if (newSales.month && newSales.sales > 0) {
       const updatedSales = [...salesData, newSales];
       setSalesData(updatedSales);
       LocalStorage.set(STORAGE_KEYS.SALES_DATA, updatedSales);
       
       // サーバーに保存
-      saveDataToServer(STORAGE_KEYS.SALES_DATA, updatedSales);
+      try {
+        await saveDataToServer(STORAGE_KEYS.SALES_DATA, updatedSales);
+      } catch (error) {
+        console.error('売上データの保存に失敗しましたが、LocalStorageには保存済みです');
+      }
       
       setNewSales({ month: '', sales: 0, target: 0 });
       setShowSalesModal(false);
@@ -266,11 +279,15 @@ const Dashboard: React.FC = () => {
       LocalStorage.set(STORAGE_KEYS.ACTIVITIES, updatedActivities);
       
       // アクティビティもサーバーに保存
-      saveDataToServer(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+      try {
+        await saveDataToServer(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+      } catch (error) {
+        console.error('アクティビティの保存に失敗しましたが、LocalStorageには保存済みです');
+      }
     }
   };
 
-  const addTeamMember = () => {
+  const addTeamMember = async () => {
     if (editingMember) {
       // 編集モード
       const updatedMembers = teamMembers.map(m => 
@@ -282,7 +299,11 @@ const Dashboard: React.FC = () => {
       LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
       
       // サーバーに保存
-      saveDataToServer(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
+      try {
+        await saveDataToServer(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
+      } catch (error) {
+        console.error('チームメンバーの更新に失敗しましたが、LocalStorageには保存済みです');
+      }
       
       // アクティビティに追加
       const activity: Activity = {
@@ -298,7 +319,11 @@ const Dashboard: React.FC = () => {
       LocalStorage.set(STORAGE_KEYS.ACTIVITIES, updatedActivities);
       
       // アクティビティもサーバーに保存
-      saveDataToServer(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+      try {
+        await saveDataToServer(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+      } catch (error) {
+        console.error('アクティビティの保存に失敗しましたが、LocalStorageには保存済みです');
+      }
       
       setEditingMember(null);
     } else {
@@ -315,7 +340,11 @@ const Dashboard: React.FC = () => {
         LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
         
         // サーバーに保存
-        saveDataToServer(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
+        try {
+          await saveDataToServer(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
+        } catch (error) {
+          console.error('チームメンバーの追加に失敗しましたが、LocalStorageには保存済みです');
+        }
         
         // アクティビティに追加
         const activity: Activity = {
@@ -331,7 +360,11 @@ const Dashboard: React.FC = () => {
         LocalStorage.set(STORAGE_KEYS.ACTIVITIES, updatedActivities);
         
         // アクティビティもサーバーに保存
-        saveDataToServer(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+        try {
+          await saveDataToServer(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+        } catch (error) {
+          console.error('アクティビティの保存に失敗しましたが、LocalStorageには保存済みです');
+        }
       }
     }
     
