@@ -403,8 +403,8 @@ const Dashboard: React.FC = () => {
   
   // タスクデータから実際の数を取得
   const totalTasks = tasks.length;
-  const activeTasks = tasks.filter((task: any) => task.status === 'in-progress' || task.status === 'review').length;
-  const completedTasks = tasks.filter((task: any) => task.status === 'done').length;
+  const activeTasks = tasks.filter((task: any) => task.status === 'in-progress' || task.status === 'on-hold').length;
+  const completedTasks = tasks.filter((task: any) => task.status === 'completed').length;
   
   const thisWeekMeetings = meetings.filter(m => {
     const meetingDate = new Date(m.date);
