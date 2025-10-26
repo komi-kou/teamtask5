@@ -55,6 +55,65 @@ const initializeDatabase = async () => {
 
     console.log('データベーステーブルが正常に作成されました');
     
+    // 既存のテーブルに新しいカラムを追加（既存のデータベース対応）
+    try {
+      // documentsカラムの追加
+      await pool.query(`
+        DO $$ 
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'team_data' AND column_name = 'documents'
+          ) THEN
+            ALTER TABLE team_data ADD COLUMN documents JSONB DEFAULT '[]';
+          END IF;
+        END $$;
+      `);
+      
+      // meeting_minutesカラムの追加
+      await pool.query(`
+        DO $$ 
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'team_data' AND column_name = 'meeting_minutes'
+          ) THEN
+            ALTER TABLE team_data ADD COLUMN meeting_minutes JSONB DEFAULT '[]';
+          END IF;
+        END $$;
+      `);
+      
+      // leadsカラムの追加
+      await pool.query(`
+        DO $$ 
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'team_data' AND column_name = 'leads'
+          ) THEN
+            ALTER TABLE team_data ADD COLUMN leads JSONB DEFAULT '[]';
+          END IF;
+        END $$;
+      `);
+      
+      // service_materialsカラムの追加
+      await pool.query(`
+        DO $$ 
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'team_data' AND column_name = 'service_materials'
+          ) THEN
+            ALTER TABLE team_data ADD COLUMN service_materials JSONB DEFAULT '[]';
+          END IF;
+        END $$;
+      `);
+      
+      console.log('既存テーブルへの新しいカラム追加を確認しました');
+    } catch (error) {
+      console.log('新しいカラムの追加チェック中:', error.message);
+    }
+    
     // テストユーザーの作成
     const testUserExists = await pool.query('SELECT id FROM users WHERE email = $1', ['test@example.com']);
     if (testUserExists.rows.length === 0) {

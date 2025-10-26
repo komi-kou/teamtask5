@@ -369,7 +369,19 @@ app.post('/api/data/:dataType', authenticateToken, async (req, res) => {
     let updateValues;
     if (existingData.rows.length > 0) {
       // 既存レコードがある場合：既存値を保持して対象フィールドだけ更新
-      updateValues = existingData.rows[0];
+      const existing = existingData.rows[0];
+      updateValues = {
+        tasks: existing.tasks || '[]',
+        projects: existing.projects || '[]',
+        sales: existing.sales || '[]',
+        team_members: existing.team_members || '[]',
+        meetings: existing.meetings || '[]',
+        activities: existing.activities || '[]',
+        documents: existing.documents || '[]',
+        meeting_minutes: existing.meeting_minutes || '[]',
+        leads: existing.leads || '[]',
+        service_materials: existing.service_materials || '[]'
+      };
       updateValues[fieldName] = jsonData;
     } else {
       // 既存レコードがない場合：デフォルト値で初期化して対象フィールドを設定
@@ -469,7 +481,19 @@ io.on('connection', (socket) => {
       let updateValues;
       if (existingData.rows.length > 0) {
         // 既存レコードがある場合：既存値を保持して対象フィールドだけ更新
-        updateValues = existingData.rows[0];
+        const existing = existingData.rows[0];
+        updateValues = {
+          tasks: existing.tasks || '[]',
+          projects: existing.projects || '[]',
+          sales: existing.sales || '[]',
+          team_members: existing.team_members || '[]',
+          meetings: existing.meetings || '[]',
+          activities: existing.activities || '[]',
+          documents: existing.documents || '[]',
+          meeting_minutes: existing.meeting_minutes || '[]',
+          leads: existing.leads || '[]',
+          service_materials: existing.service_materials || '[]'
+        };
         updateValues[fieldName] = jsonData;
       } else {
         // 既存レコードがない場合：デフォルト値で初期化して対象フィールドを設定
