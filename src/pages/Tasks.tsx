@@ -53,8 +53,16 @@ const Tasks: React.FC = () => {
         ApiService.getData(STORAGE_KEYS.TEAM_MEMBERS)
       ]);
       
-      // サーバーのデータは参考程度に。LocalStorageとのマージはしない
-      // （LocalStorage優先のため、サーバーから取得したデータで上書きしない）
+      // LocalStorageが空の場合のみサーバーのデータを使用
+      // これにより、既存のローカルデータを保持しつつ、別ブラウザでもデータが表示される
+      if (tasksResponse.data && (!LocalStorage.get(STORAGE_KEYS.TASKS_DATA) || LocalStorage.get(STORAGE_KEYS.TASKS_DATA)?.length === 0)) {
+        setTasks(tasksResponse.data);
+        LocalStorage.set(STORAGE_KEYS.TASKS_DATA, tasksResponse.data);
+      }
+      if (membersResponse.data && (!LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS) || LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS)?.length === 0)) {
+        setTeamMembers(membersResponse.data);
+        LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, membersResponse.data);
+      }
       
     } catch (error) {
       console.error('サーバーからのデータ取得エラー:', error);

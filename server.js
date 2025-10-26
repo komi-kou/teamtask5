@@ -86,8 +86,8 @@ app.post('/api/auth/register', async (req, res) => {
     
     // チームデータ初期化
     await pool.query(
-      'INSERT INTO team_data (team_id, tasks, projects, sales, team_members, meetings, activities) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [teamId, '[]', '[]', '[]', '[]', '[]', '[]']
+      'INSERT INTO team_data (team_id, tasks, projects, sales, team_members, meetings, activities, documents, meeting_minutes, leads, service_materials) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+      [teamId, '[]', '[]', '[]', '[]', '[]', '[]', '[]', '[]', '[]', '[]']
     );
 
     // ユーザー作成
@@ -305,11 +305,18 @@ app.get('/api/data/:dataType', authenticateToken, async (req, res) => {
     const data = dataResult.rows[0];
     const fieldMap = {
       'tasks': 'tasks',
+      'tasksData': 'tasks',
       'projects': 'projects',
+      'projectsData': 'projects',
       'sales': 'sales',
+      'salesData': 'sales',
       'teamMembers': 'team_members',
       'meetings': 'meetings',
-      'activities': 'activities'
+      'activities': 'activities',
+      'documentsData': 'documents',
+      'meetingMinutes': 'meeting_minutes',
+      'leadsData': 'leads',
+      'serviceMaterials': 'service_materials'
     };
 
     const fieldName = fieldMap[dataType] || dataType;
@@ -337,11 +344,18 @@ app.post('/api/data/:dataType', authenticateToken, async (req, res) => {
     
     const fieldMap = {
       'tasks': 'tasks',
+      'tasksData': 'tasks',
       'projects': 'projects',
+      'projectsData': 'projects',
       'sales': 'sales',
+      'salesData': 'sales',
       'teamMembers': 'team_members',
       'meetings': 'meetings',
-      'activities': 'activities'
+      'activities': 'activities',
+      'documentsData': 'documents',
+      'meetingMinutes': 'meeting_minutes',
+      'leadsData': 'leads',
+      'serviceMaterials': 'service_materials'
     };
 
     const fieldName = fieldMap[dataType] || dataType;
@@ -365,20 +379,27 @@ app.post('/api/data/:dataType', authenticateToken, async (req, res) => {
         sales: '[]',
         team_members: '[]',
         meetings: '[]',
-        activities: '[]'
+        activities: '[]',
+        documents: '[]',
+        meeting_minutes: '[]',
+        leads: '[]',
+        service_materials: '[]'
       };
       updateValues[fieldName] = jsonData;
     }
     
     // UPSERT（存在すればUPDATE、なければINSERT）
     await pool.query(
-      `INSERT INTO team_data (team_id, tasks, projects, sales, team_members, meetings, activities)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO team_data (team_id, tasks, projects, sales, team_members, meetings, activities, documents, meeting_minutes, leads, service_materials)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       ON CONFLICT (team_id)
       DO UPDATE SET tasks = EXCLUDED.tasks, projects = EXCLUDED.projects, sales = EXCLUDED.sales,
-                     team_members = EXCLUDED.team_members, meetings = EXCLUDED.meetings, activities = EXCLUDED.activities`,
+                     team_members = EXCLUDED.team_members, meetings = EXCLUDED.meetings, activities = EXCLUDED.activities,
+                     documents = EXCLUDED.documents, meeting_minutes = EXCLUDED.meeting_minutes,
+                     leads = EXCLUDED.leads, service_materials = EXCLUDED.service_materials`,
       [teamId, updateValues.tasks, updateValues.projects, updateValues.sales, 
-       updateValues.team_members, updateValues.meetings, updateValues.activities]
+       updateValues.team_members, updateValues.meetings, updateValues.activities,
+       updateValues.documents, updateValues.meeting_minutes, updateValues.leads, updateValues.service_materials]
     );
 
     // Socket.ioでリアルタイム更新を通知
@@ -424,11 +445,18 @@ io.on('connection', (socket) => {
     const { teamId, dataType, data: newData } = data;
     const fieldMap = {
       'tasks': 'tasks',
+      'tasksData': 'tasks',
       'projects': 'projects',
+      'projectsData': 'projects',
       'sales': 'sales',
+      'salesData': 'sales',
       'teamMembers': 'team_members',
       'meetings': 'meetings',
-      'activities': 'activities'
+      'activities': 'activities',
+      'documentsData': 'documents',
+      'meetingMinutes': 'meeting_minutes',
+      'leadsData': 'leads',
+      'serviceMaterials': 'service_materials'
     };
     
     const fieldName = fieldMap[dataType] || dataType;
@@ -451,20 +479,27 @@ io.on('connection', (socket) => {
           sales: '[]',
           team_members: '[]',
           meetings: '[]',
-          activities: '[]'
+          activities: '[]',
+          documents: '[]',
+          meeting_minutes: '[]',
+          leads: '[]',
+          service_materials: '[]'
         };
         updateValues[fieldName] = jsonData;
       }
       
       // UPSERT（存在すればUPDATE、なければINSERT）
       await pool.query(
-        `INSERT INTO team_data (team_id, tasks, projects, sales, team_members, meetings, activities)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO team_data (team_id, tasks, projects, sales, team_members, meetings, activities, documents, meeting_minutes, leads, service_materials)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT (team_id)
         DO UPDATE SET tasks = EXCLUDED.tasks, projects = EXCLUDED.projects, sales = EXCLUDED.sales,
-                       team_members = EXCLUDED.team_members, meetings = EXCLUDED.meetings, activities = EXCLUDED.activities`,
+                       team_members = EXCLUDED.team_members, meetings = EXCLUDED.meetings, activities = EXCLUDED.activities,
+                       documents = EXCLUDED.documents, meeting_minutes = EXCLUDED.meeting_minutes,
+                       leads = EXCLUDED.leads, service_materials = EXCLUDED.service_materials`,
         [teamId, updateValues.tasks, updateValues.projects, updateValues.sales, 
-         updateValues.team_members, updateValues.meetings, updateValues.activities]
+         updateValues.team_members, updateValues.meetings, updateValues.activities,
+         updateValues.documents, updateValues.meeting_minutes, updateValues.leads, updateValues.service_materials]
       );
       socket.to(teamId).emit('data-updated', { dataType, data: newData });
     } catch (error) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, DollarSign, Users, Target, Plus, Edit2, Trash2 } from 'lucide-react';
 import { LocalStorage, STORAGE_KEYS } from '../utils/storage';
+import ApiService from '../services/api';
 import './Sales.css';
 
 interface Lead {
@@ -50,11 +51,27 @@ const Sales: React.FC = () => {
   });
   const [leads, setLeads] = useState<Lead[]>([]);
 
+  // データをサーバーから取得
+  const loadDataFromServer = async () => {
+    try {
+      const response = await ApiService.getData(STORAGE_KEYS.LEADS_DATA);
+      if (response.data && (!LocalStorage.get(STORAGE_KEYS.LEADS_DATA) || LocalStorage.get(STORAGE_KEYS.LEADS_DATA)?.length === 0)) {
+        setLeads(response.data);
+        LocalStorage.set(STORAGE_KEYS.LEADS_DATA, response.data);
+      }
+    } catch (error) {
+      console.error('サーバーからのデータ取得エラー:', error);
+    }
+  };
+
   useEffect(() => {
     const savedLeads = LocalStorage.get<Lead[]>(STORAGE_KEYS.LEADS_DATA);
     if (savedLeads && savedLeads.length > 0) {
       setLeads(savedLeads);
     }
+    
+    // サーバーからも取得を試みる
+    loadDataFromServer();
   }, []);
 
   const addLead = () => {

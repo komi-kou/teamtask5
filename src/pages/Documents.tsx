@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, MessageSquare, Search, Calendar, Plus, Users, Clock, Edit2, Trash2 } from 'lucide-react';
 import { LocalStorage, STORAGE_KEYS } from '../utils/storage';
+import ApiService from '../services/api';
 import './Documents.css';
 
 interface Document {
@@ -66,6 +67,33 @@ const Documents: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
 
+  // データをサーバーから取得
+  const loadDataFromServer = async () => {
+    try {
+      const [docsResponse, minutesResponse, membersResponse] = await Promise.all([
+        ApiService.getData(STORAGE_KEYS.DOCUMENTS_DATA),
+        ApiService.getData(STORAGE_KEYS.MEETING_MINUTES),
+        ApiService.getData(STORAGE_KEYS.TEAM_MEMBERS)
+      ]);
+      
+      // LocalStorageが空の場合のみサーバーのデータを使用
+      if (docsResponse.data && (!LocalStorage.get(STORAGE_KEYS.DOCUMENTS_DATA) || LocalStorage.get(STORAGE_KEYS.DOCUMENTS_DATA)?.length === 0)) {
+        setDocuments(docsResponse.data);
+        LocalStorage.set(STORAGE_KEYS.DOCUMENTS_DATA, docsResponse.data);
+      }
+      if (minutesResponse.data && (!LocalStorage.get(STORAGE_KEYS.MEETING_MINUTES) || LocalStorage.get(STORAGE_KEYS.MEETING_MINUTES)?.length === 0)) {
+        setMeetingMinutes(minutesResponse.data);
+        LocalStorage.set(STORAGE_KEYS.MEETING_MINUTES, minutesResponse.data);
+      }
+      if (membersResponse.data && (!LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS) || LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS)?.length === 0)) {
+        setTeamMembers(membersResponse.data);
+        LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, membersResponse.data);
+      }
+    } catch (error) {
+      console.error('サーバーからのデータ取得エラー:', error);
+    }
+  };
+
   useEffect(() => {
     const savedDocs = LocalStorage.get<Document[]>(STORAGE_KEYS.DOCUMENTS_DATA);
     const savedMinutes = LocalStorage.get<MeetingMinutes[]>(STORAGE_KEYS.MEETING_MINUTES);
@@ -80,6 +108,9 @@ const Documents: React.FC = () => {
     if (savedMembers && savedMembers.length > 0) {
       setTeamMembers(savedMembers);
     }
+    
+    // サーバーからも取得を試みる
+    loadDataFromServer();
   }, []);
 
 

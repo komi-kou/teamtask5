@@ -77,8 +77,32 @@ const Dashboard: React.FC = () => {
       const response = await ApiService.getAllData();
       const serverData = response.data || {};
       
-      // サーバーのデータは参考程度に。LocalStorageとのマージはしない
-      // （LocalStorage優先のため、サーバーから取得したデータで上書きしない）
+      // LocalStorageが空の場合のみサーバーのデータを使用
+      // これにより、既存のローカルデータを保持しつつ、別ブラウザでもデータが表示される
+      if (serverData.tasks && (!LocalStorage.get(STORAGE_KEYS.TASKS_DATA) || LocalStorage.get(STORAGE_KEYS.TASKS_DATA)?.length === 0)) {
+        setTasks(serverData.tasks);
+        LocalStorage.set(STORAGE_KEYS.TASKS_DATA, serverData.tasks);
+      }
+      if (serverData.projects && (!LocalStorage.get(STORAGE_KEYS.PROJECTS_DATA) || LocalStorage.get(STORAGE_KEYS.PROJECTS_DATA)?.length === 0)) {
+        setProjects(serverData.projects);
+        LocalStorage.set(STORAGE_KEYS.PROJECTS_DATA, serverData.projects);
+      }
+      if (serverData.sales && (!LocalStorage.get(STORAGE_KEYS.SALES_DATA) || LocalStorage.get(STORAGE_KEYS.SALES_DATA)?.length === 0)) {
+        setSalesData(serverData.sales);
+        LocalStorage.set(STORAGE_KEYS.SALES_DATA, serverData.sales);
+      }
+      if (serverData.team_members && (!LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS) || LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS)?.length === 0)) {
+        setTeamMembers(serverData.team_members);
+        LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, serverData.team_members);
+      }
+      if (serverData.meetings && (!LocalStorage.get(STORAGE_KEYS.MEETINGS) || LocalStorage.get(STORAGE_KEYS.MEETINGS)?.length === 0)) {
+        setMeetings(serverData.meetings);
+        LocalStorage.set(STORAGE_KEYS.MEETINGS, serverData.meetings);
+      }
+      if (serverData.activities && (!LocalStorage.get(STORAGE_KEYS.ACTIVITIES) || LocalStorage.get(STORAGE_KEYS.ACTIVITIES)?.length === 0)) {
+        setActivities(serverData.activities);
+        LocalStorage.set(STORAGE_KEYS.ACTIVITIES, serverData.activities);
+      }
       
     } catch (error) {
       console.error('サーバーからのデータ取得エラー:', error);

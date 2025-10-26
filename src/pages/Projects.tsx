@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Calendar, Users, DollarSign, Clock, CheckCircle, AlertCircle, ExternalLink, Edit2, Trash2 } from 'lucide-react';
 import { LocalStorage, STORAGE_KEYS } from '../utils/storage';
+import ApiService from '../services/api';
 import './Projects.css';
 
 interface Project {
@@ -53,6 +54,28 @@ const Projects: React.FC = () => {
     status: 'pending'
   });
 
+  // データをサーバーから取得
+  const loadDataFromServer = async () => {
+    try {
+      const [projectsResponse, membersResponse] = await Promise.all([
+        ApiService.getData(STORAGE_KEYS.PROJECTS_DATA),
+        ApiService.getData(STORAGE_KEYS.TEAM_MEMBERS)
+      ]);
+      
+      // LocalStorageが空の場合のみサーバーのデータを使用
+      if (projectsResponse.data && (!LocalStorage.get(STORAGE_KEYS.PROJECTS_DATA) || LocalStorage.get(STORAGE_KEYS.PROJECTS_DATA)?.length === 0)) {
+        setProjects(projectsResponse.data);
+        LocalStorage.set(STORAGE_KEYS.PROJECTS_DATA, projectsResponse.data);
+      }
+      if (membersResponse.data && (!LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS) || LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS)?.length === 0)) {
+        setTeamMembers(membersResponse.data);
+        LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, membersResponse.data);
+      }
+    } catch (error) {
+      console.error('サーバーからのデータ取得エラー:', error);
+    }
+  };
+
   useEffect(() => {
     const savedProjects = LocalStorage.get<Project[]>(STORAGE_KEYS.PROJECTS_DATA);
     const savedMembers = LocalStorage.get<{id: number, name: string, role: string}[]>(STORAGE_KEYS.TEAM_MEMBERS);
@@ -63,6 +86,9 @@ const Projects: React.FC = () => {
     if (savedMembers && savedMembers.length > 0) {
       setTeamMembers(savedMembers);
     }
+    
+    // サーバーからも取得を試みる
+    loadDataFromServer();
   }, []);
 
   const addProject = () => {

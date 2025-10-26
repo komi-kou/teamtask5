@@ -45,6 +45,10 @@ const initializeDatabase = async () => {
         team_members JSONB DEFAULT '[]',
         meetings JSONB DEFAULT '[]',
         activities JSONB DEFAULT '[]',
+        documents JSONB DEFAULT '[]',
+        meeting_minutes JSONB DEFAULT '[]',
+        leads JSONB DEFAULT '[]',
+        service_materials JSONB DEFAULT '[]',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
