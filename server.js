@@ -3,28 +3,34 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const http = require('http');
+const path = require('path');
 const { pool, initializeDatabase } = require('./database');
 
 const app = express();
 const server = http.createServer(app);
+
+const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'your-secret-key';
+
+// CORS設定
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+  ? ['https://teamtask5.onrender.com']
+  : ['http://localhost:3000'];
+
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
-    methods: ["GET", "POST"]
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
-const PORT = process.env.PORT || 3001;
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
 // ミドルウェア
-app.use(cors());
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
 app.use(express.json());
-
-// メモリ内データベース（テスト用）
-let users = [];
-let teams = [];
-let teamData = {};
 
 // JWT認証ミドルウェア
 const authenticateToken = (req, res, next) => {
@@ -63,47 +69,34 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     // メール重複チェック
-    if (users.find(u => u.email === email)) {
+    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (existingUser.rows.length > 0) {
       return res.status(400).json({ message: 'このメールアドレスは既に使用されています' });
     }
 
     const userId = generateId();
     const teamId = generateId();
+    const teamCode = generateTeamCode();
 
     // 個人用チームを自動作成
-    teams.push({
-      id: teamId,
-      name: `${username}のチーム`,
-      code: generateTeamCode(),
-      ownerId: userId,
-      members: [userId],
-      createdAt: new Date().toISOString()
-    });
+    await pool.query(
+      'INSERT INTO teams (id, name, code, owner_id, members) VALUES ($1, $2, $3, $4, $5)',
+      [teamId, `${username}のチーム`, teamCode, userId, [userId]]
+    );
     
-    teamData[teamId] = {
-      tasks: [],
-      projects: [],
-      sales: [],
-      teamMembers: [],
-      meetings: [],
-      activities: []
-    };
+    // チームデータ初期化
+    await pool.query(
+      'INSERT INTO team_data (team_id, tasks, projects, sales, team_members, meetings, activities) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [teamId, '[]', '[]', '[]', '[]', '[]', '[]']
+    );
 
     // ユーザー作成
-    const user = {
-      id: userId,
-      username,
-      email,
-      password, // パスワードを保存
-      teamId,
-      teamName: `${username}のチーム`,
-      role: 'owner',
-      createdAt: new Date().toISOString()
-    };
+    await pool.query(
+      'INSERT INTO users (id, username, email, password, team_id, team_name, role) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [userId, username, email, password, teamId, `${username}のチーム`, 'owner']
+    );
 
-    users.push(user);
-    console.log('User created:', user);
-    console.log('Total users:', users.length);
+    console.log('User created:', { id: userId, username, email });
 
     // JWTトークン生成
     const token = jwt.sign(
@@ -116,13 +109,13 @@ app.post('/api/auth/register', async (req, res) => {
       success: true,
       token,
       user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        teamId: user.teamId,
-        teamName: user.teamName,
-        role: user.role,
-        createdAt: user.createdAt
+        id: userId,
+        username,
+        email,
+        teamId,
+        teamName: `${username}のチーム`,
+        role: 'owner',
+        createdAt: new Date().toISOString()
       }
     });
   } catch (error) {
@@ -143,13 +136,14 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // ユーザー検索
-    const user = users.find(u => u.email === email);
-    console.log('User found:', user);
-    console.log('Total users:', users.length);
+    const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     
-    if (!user) {
+    if (userResult.rows.length === 0) {
       return res.status(401).json({ message: 'メールアドレスまたはパスワードが正しくありません' });
     }
+
+    const user = userResult.rows[0];
+    console.log('User found:', { id: user.id, email: user.email });
 
     // パスワード検証（実際のアプリではハッシュ化されたパスワードと比較）
     if (password !== user.password) {
@@ -157,15 +151,11 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // チーム情報取得
-    let teamName = null;
-    if (user.teamId) {
-      const team = teams.find(t => t.id === user.teamId);
-      teamName = team ? team.name : null;
-    }
+    let teamName = user.team_name || null;
 
     // JWTトークン生成
     const token = jwt.sign(
-      { userId: user.id, email: user.email, teamId: user.teamId },
+      { userId: user.id, email: user.email, teamId: user.team_id },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -179,10 +169,10 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id,
         username: user.username,
         email: user.email,
-        teamId: user.teamId,
+        teamId: user.team_id,
         teamName: teamName,
         role: user.role,
-        createdAt: user.createdAt
+        createdAt: user.created_at
       }
     });
   } catch (error) {
@@ -197,20 +187,25 @@ app.post('/api/auth/join-team', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
 
     // チーム検索
-    const team = teams.find(t => t.code === teamCode);
-    if (!team) {
+    const teamResult = await pool.query('SELECT * FROM teams WHERE code = $1', [teamCode]);
+    if (teamResult.rows.length === 0) {
       return res.status(404).json({ message: 'チームが見つかりません' });
     }
 
-    // ユーザーをチームに追加
-    const user = users.find(u => u.id === userId);
-    if (!user) {
-      return res.status(404).json({ message: 'ユーザーが見つかりません' });
-    }
+    const team = teamResult.rows[0];
 
-    user.teamId = team.id;
-    user.teamName = team.name;
-    team.members.push(userId);
+    // ユーザーをチームに追加
+    await pool.query(
+      'UPDATE users SET team_id = $1, team_name = $2 WHERE id = $3',
+      [team.id, team.name, userId]
+    );
+
+    // チームメンバーを更新
+    const members = team.members || [];
+    if (!members.includes(userId)) {
+      members.push(userId);
+      await pool.query('UPDATE teams SET members = $1 WHERE id = $2', [members, team.id]);
+    }
 
     res.json({
       success: true,
@@ -230,24 +225,24 @@ app.post('/api/auth/join-team', authenticateToken, async (req, res) => {
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const user = users.find(u => u.id === userId);
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
     
-    if (!user) {
+    if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'ユーザーが見つかりません' });
     }
 
-    // チーム情報取得
-    let teamName = null;
-    if (user.teamId) {
-      const team = teams.find(t => t.id === user.teamId);
-      teamName = team ? team.name : null;
-    }
+    const user = userResult.rows[0];
 
     res.json({
       success: true,
       user: {
-        ...user,
-        teamName
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        teamId: user.team_id,
+        teamName: user.team_name,
+        role: user.role,
+        createdAt: user.created_at
       }
     });
   } catch (error) {
@@ -260,14 +255,30 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 app.get('/api/data/all', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const user = users.find(u => u.id === userId);
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
     
-    if (!user || !user.teamId) {
+    if (userResult.rows.length === 0 || !userResult.rows[0].team_id) {
       return res.json({ data: {} });
     }
 
-    const data = teamData[user.teamId] || {};
-    res.json({ data });
+    const teamId = userResult.rows[0].team_id;
+    const dataResult = await pool.query('SELECT * FROM team_data WHERE team_id = $1', [teamId]);
+    
+    if (dataResult.rows.length === 0) {
+      return res.json({ data: {} });
+    }
+
+    const data = dataResult.rows[0];
+    res.json({ 
+      data: {
+        tasks: data.tasks || [],
+        projects: data.projects || [],
+        sales: data.sales || [],
+        teamMembers: data.team_members || [],
+        meetings: data.meetings || [],
+        activities: data.activities || []
+      }
+    });
   } catch (error) {
     console.error('Get all data error:', error);
     res.status(500).json({ message: 'サーバーエラーが発生しました' });
@@ -278,14 +289,33 @@ app.get('/api/data/:dataType', authenticateToken, async (req, res) => {
   try {
     const { dataType } = req.params;
     const userId = req.user.userId;
-    const user = users.find(u => u.id === userId);
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
     
-    if (!user || !user.teamId) {
+    if (userResult.rows.length === 0 || !userResult.rows[0].team_id) {
       return res.json({ data: [] });
     }
 
-    const data = teamData[user.teamId]?.[dataType] || [];
-    res.json({ data });
+    const teamId = userResult.rows[0].team_id;
+    const dataResult = await pool.query('SELECT * FROM team_data WHERE team_id = $1', [teamId]);
+    
+    if (dataResult.rows.length === 0) {
+      return res.json({ data: [] });
+    }
+
+    const data = dataResult.rows[0];
+    const fieldMap = {
+      'tasks': 'tasks',
+      'projects': 'projects',
+      'sales': 'sales',
+      'teamMembers': 'team_members',
+      'meetings': 'meetings',
+      'activities': 'activities'
+    };
+
+    const fieldName = fieldMap[dataType] || dataType;
+    const result = data[fieldName] || [];
+    
+    res.json({ data: result });
   } catch (error) {
     console.error('Get data error:', error);
     res.status(500).json({ message: 'サーバーエラーが発生しました' });
@@ -297,20 +327,35 @@ app.post('/api/data/:dataType', authenticateToken, async (req, res) => {
     const { dataType } = req.params;
     const data = req.body;
     const userId = req.user.userId;
-    const user = users.find(u => u.id === userId);
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
     
-    if (!user || !user.teamId) {
+    if (userResult.rows.length === 0 || !userResult.rows[0].team_id) {
       return res.status(400).json({ message: 'チームに所属していません' });
     }
 
-    if (!teamData[user.teamId]) {
-      teamData[user.teamId] = {};
-    }
+    const teamId = userResult.rows[0].team_id;
+    
+    const fieldMap = {
+      'tasks': 'tasks',
+      'projects': 'projects',
+      'sales': 'sales',
+      'teamMembers': 'team_members',
+      'meetings': 'meetings',
+      'activities': 'activities'
+    };
 
-    teamData[user.teamId][dataType] = data;
+    const fieldName = fieldMap[dataType] || dataType;
+    
+    // データをJSON文字列として保存
+    const jsonData = JSON.stringify(data);
+    
+    await pool.query(
+      `UPDATE team_data SET ${fieldName} = $1 WHERE team_id = $2`,
+      [jsonData, teamId]
+    );
 
     // Socket.ioでリアルタイム更新を通知
-    io.to(user.teamId).emit('data-updated', {
+    io.to(teamId).emit('data-updated', {
       dataType,
       data,
       userId
@@ -337,11 +382,28 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.id} joined team ${teamId}`);
   });
 
-  socket.on('data-update', (data) => {
+  socket.on('data-update', async (data) => {
     const { teamId, dataType, data: newData } = data;
-    if (teamData[teamId]) {
-      teamData[teamId][dataType] = newData;
+    const fieldMap = {
+      'tasks': 'tasks',
+      'projects': 'projects',
+      'sales': 'sales',
+      'teamMembers': 'team_members',
+      'meetings': 'meetings',
+      'activities': 'activities'
+    };
+    
+    const fieldName = fieldMap[dataType] || dataType;
+    const jsonData = JSON.stringify(newData);
+    
+    try {
+      await pool.query(
+        `UPDATE team_data SET ${fieldName} = $1 WHERE team_id = $2`,
+        [jsonData, teamId]
+      );
       socket.to(teamId).emit('data-updated', { dataType, data: newData });
+    } catch (error) {
+      console.error('Socket data update error:', error);
     }
   });
 
@@ -351,51 +413,22 @@ io.on('connection', (socket) => {
 });
 
 // サーバー起動
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`API URL: http://localhost:${PORT}/api`);
-  console.log(`Socket URL: http://localhost:${PORT}`);
-});
-
-// テスト用データの初期化
-const initTestData = () => {
-  console.log('Initializing test data...');
-  
-  // テストユーザーを作成
-  const testUserId = generateId();
-  const testTeamId = generateId();
-  const testTeamCode = generateTeamCode();
-  
-  users.push({
-    id: testUserId,
-    username: 'テストユーザー',
-    email: 'test@example.com',
-    teamId: testTeamId,
-    teamName: 'テストチーム',
-    role: 'owner',
-    createdAt: new Date().toISOString()
-  });
-  
-  teams.push({
-    id: testTeamId,
-    name: 'テストチーム',
-    code: testTeamCode,
-    ownerId: testUserId,
-    members: [testUserId],
-    createdAt: new Date().toISOString()
-  });
-  
-  teamData[testTeamId] = {
-    tasks: [],
-    projects: [],
-    sales: [],
-    teamMembers: [],
-    meetings: [],
-    activities: []
-  };
-  
-  console.log(`Test user created: test@example.com / password`);
-  console.log(`Test team code: ${testTeamCode}`);
+const startServer = async () => {
+  try {
+    // データベース初期化
+    await initializeDatabase();
+    console.log('データベース初期化完了');
+    
+    // サーバー起動
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`API URL: http://localhost:${PORT}/api`);
+      console.log(`Socket URL: http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error('サーバー起動エラー:', error);
+    process.exit(1);
+  }
 };
 
-initTestData();
+startServer();
