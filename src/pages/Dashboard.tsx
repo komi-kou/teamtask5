@@ -147,17 +147,27 @@ const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    // まずLocalStorageから読み込む
+    loadDataFromLocal();
+    setIsLoading(false);
+    
     if (isAuthenticated) {
+      // サーバーからも取得を試みる（バックグラウンド）
       loadDataFromServer();
       
       // Socket.io接続
       if (user?.teamId) {
         SocketService.connect(user.teamId);
         
-        // リアルタイム更新のリスナーを設定
+        // リアルタイム更新のリスナーを設定（他のユーザーの変更のみ適用）
         const handleDataUpdate = (data: any) => {
           console.log('Real-time data update:', data);
-          const { dataType, data: newData } = data;
+          const { dataType, data: newData, userId } = data;
+          
+          // 現在のユーザー自身の変更は無視（LocalStorage優先）
+          if (userId === user?.userId) {
+            return;
+          }
           
           // データタイプに応じて状態を更新
           switch (dataType) {
@@ -189,9 +199,6 @@ const Dashboard: React.FC = () => {
           SocketService.off('dataUpdated', handleDataUpdate);
         };
       }
-    } else {
-      loadDataFromLocal();
-      setIsLoading(false);
     }
   }, [isAuthenticated, user?.teamId]);
 

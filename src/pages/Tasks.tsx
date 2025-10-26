@@ -95,16 +95,26 @@ const Tasks: React.FC = () => {
   };
 
   useEffect(() => {
+    // まずLocalStorageから読み込む
+    loadDataFromLocal();
+    setIsLoading(false);
+    
     if (isAuthenticated) {
+      // サーバーからも取得を試みる（バックグラウンド）
       loadDataFromServer();
       
       // Socket.io接続
       if (user?.teamId) {
         SocketService.connect(user.teamId);
         
-        // リアルタイム更新のリスナーを設定
+        // リアルタイム更新のリスナーを設定（他のユーザーの変更のみ適用）
         const handleDataUpdate = (data: any) => {
-          const { dataType, data: newData } = data;
+          const { dataType, data: newData, userId } = data;
+          
+          // 現在のユーザー自身の変更は無視（LocalStorage優先）
+          if (userId === user?.userId) {
+            return;
+          }
           
           if (dataType === STORAGE_KEYS.TASKS_DATA) {
             setTasks(newData);
@@ -119,9 +129,6 @@ const Tasks: React.FC = () => {
           SocketService.off('dataUpdated', handleDataUpdate);
         };
       }
-    } else {
-      loadDataFromLocal();
-      setIsLoading(false);
     }
   }, [isAuthenticated, user?.teamId]);
 
