@@ -1,7 +1,8 @@
 import { io, Socket } from 'socket.io-client';
 import { LocalStorage } from '../utils/storage';
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:3001';
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 
+  (window.location.hostname === 'localhost' ? 'http://localhost:3001' : window.location.origin);
 
 class SocketService {
   private socket: Socket | null = null;

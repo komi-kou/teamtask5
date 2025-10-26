@@ -42,7 +42,7 @@ const Tasks: React.FC = () => {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  // データをサーバーから取得
+  // データをサーバーから取得（メイン処理）
   const loadDataFromServer = async () => {
     if (!isAuthenticated) return;
     
@@ -53,33 +53,36 @@ const Tasks: React.FC = () => {
         ApiService.getData(STORAGE_KEYS.TEAM_MEMBERS)
       ]);
       
-      // LocalStorageが空の場合のみサーバーのデータを使用
-      // これにより、既存のローカルデータを保持しつつ、別ブラウザでもデータが表示される
-      if (tasksResponse.data && (!LocalStorage.get(STORAGE_KEYS.TASKS_DATA) || LocalStorage.get(STORAGE_KEYS.TASKS_DATA)?.length === 0)) {
+      // サーバーのデータを優先して使用
+      if (tasksResponse.data) {
         setTasks(tasksResponse.data);
+        // LocalStorageにキャッシュとして保存
         LocalStorage.set(STORAGE_KEYS.TASKS_DATA, tasksResponse.data);
       }
-      if (membersResponse.data && (!LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS) || LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS)?.length === 0)) {
+      if (membersResponse.data) {
         setTeamMembers(membersResponse.data);
+        // LocalStorageにキャッシュとして保存
         LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, membersResponse.data);
       }
       
     } catch (error) {
       console.error('サーバーからのデータ取得エラー:', error);
+      // サーバーエラー時のみローカルストレージから読み込み
+      loadDataFromLocal();
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ローカルストレージからデータを読み込み
+  // ローカルストレージからデータを読み込み（フォールバック用）
   const loadDataFromLocal = () => {
     const savedTasks = LocalStorage.get<Task[]>(STORAGE_KEYS.TASKS_DATA);
     const savedMembers = LocalStorage.get<TeamMember[]>(STORAGE_KEYS.TEAM_MEMBERS);
     
-    if (savedTasks && savedTasks.length > 0) {
+    if (savedTasks) {
       setTasks(savedTasks);
     }
-    if (savedMembers && savedMembers.length > 0) {
+    if (savedMembers) {
       setTeamMembers(savedMembers);
     }
   };
@@ -96,31 +99,25 @@ const Tasks: React.FC = () => {
   };
 
   useEffect(() => {
-    // まずLocalStorageから読み込む
-    loadDataFromLocal();
-    setIsLoading(false);
-    
     if (isAuthenticated) {
-      // サーバーからも取得を試みる（バックグラウンド）
+      // サーバーからデータを取得（メイン処理）
       loadDataFromServer();
       
       // Socket.io接続
       if (user?.teamId) {
         SocketService.connect(user.teamId);
         
-        // リアルタイム更新のリスナーを設定（他のユーザーの変更のみ適用）
+        // リアルタイム更新のリスナーを設定
         const handleDataUpdate = (data: any) => {
           const { dataType, data: newData, userId } = data;
           
-          // 現在のユーザー自身の変更は無視（LocalStorage優先）
-          if (userId === user?.userId) {
-            return;
-          }
-          
+          // 自分の変更も含めてすべての変更を反映
           if (dataType === STORAGE_KEYS.TASKS_DATA) {
             setTasks(newData);
+            LocalStorage.set(STORAGE_KEYS.TASKS_DATA, newData);
           } else if (dataType === STORAGE_KEYS.TEAM_MEMBERS) {
             setTeamMembers(newData);
+            LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, newData);
           }
         };
         
@@ -130,6 +127,10 @@ const Tasks: React.FC = () => {
           SocketService.off('dataUpdated', handleDataUpdate);
         };
       }
+    } else {
+      // 非認証時はローカルストレージから読み込み
+      loadDataFromLocal();
+      setIsLoading(false);
     }
   }, [isAuthenticated, user?.teamId]);
 

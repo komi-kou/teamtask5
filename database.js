@@ -1,10 +1,123 @@
 const { Pool } = require('pg');
 
+// インメモリデータストア（開発環境のフォールバック用）
+let inMemoryStore = {
+  users: new Map(),
+  teams: new Map(),
+  teamData: new Map()
+};
+
 // データベース接続設定
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/teamtask',
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+let pool;
+let useInMemory = false;
+
+// 本番環境またはDATABASE_URLが設定されている場合はPostgreSQLを使用
+if (process.env.DATABASE_URL || process.env.NODE_ENV === 'production') {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/teamtask',
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
+} else {
+  // 開発環境でPostgreSQLが利用できない場合はインメモリストアを使用
+  console.log('⚠️ PostgreSQLが利用できません。インメモリストアを使用します（データは永続化されません）');
+  useInMemory = true;
+  
+  // Poolのモック
+  pool = {
+    query: async (query, params) => {
+      // 簡易的なSQLパーサー（主要なクエリのみ対応）
+      const queryLower = query.toLowerCase();
+      
+      if (queryLower.includes('create table')) {
+        return { rows: [] };
+      }
+      
+      if (queryLower.includes('select') && queryLower.includes('from users')) {
+        const email = params?.[0];
+        const user = Array.from(inMemoryStore.users.values()).find(u => u.email === email);
+        return { rows: user ? [user] : [] };
+      }
+      
+      if (queryLower.includes('select') && queryLower.includes('from teams')) {
+        const code = params?.[0];
+        const team = Array.from(inMemoryStore.teams.values()).find(t => t.code === code);
+        return { rows: team ? [team] : [] };
+      }
+      
+      if (queryLower.includes('select') && queryLower.includes('from team_data')) {
+        const teamId = params?.[0];
+        const data = inMemoryStore.teamData.get(teamId);
+        return { rows: data ? [data] : [] };
+      }
+      
+      if (queryLower.includes('insert into users')) {
+        const [id, username, email, password, team_id, team_name, role] = params;
+        const user = { id, username, email, password, team_id, team_name, role, created_at: new Date() };
+        inMemoryStore.users.set(id, user);
+        return { rows: [user] };
+      }
+      
+      if (queryLower.includes('insert into teams')) {
+        const [id, name, code, owner_id, members] = params;
+        const team = { id, name, code, owner_id, members, created_at: new Date() };
+        inMemoryStore.teams.set(id, team);
+        return { rows: [team] };
+      }
+      
+      if (queryLower.includes('insert into team_data')) {
+        const teamId = params[0];
+        const data = {
+          team_id: teamId,
+          tasks: params[1] || '[]',
+          projects: params[2] || '[]',
+          sales: params[3] || '[]',
+          team_members: params[4] || '[]',
+          meetings: params[5] || '[]',
+          activities: params[6] || '[]',
+          documents: params[7] || '[]',
+          meeting_minutes: params[8] || '[]',
+          leads: params[9] || '[]',
+          service_materials: params[10] || '[]',
+          updated_at: new Date()
+        };
+        
+        // UPSERT処理
+        if (queryLower.includes('on conflict')) {
+          inMemoryStore.teamData.set(teamId, data);
+        } else if (!inMemoryStore.teamData.has(teamId)) {
+          inMemoryStore.teamData.set(teamId, data);
+        }
+        return { rows: [data] };
+      }
+      
+      if (queryLower.includes('update users')) {
+        // 簡易的なUPDATE処理
+        const teamId = params[0];
+        const teamName = params[1];
+        const userId = params[2];
+        const user = inMemoryStore.users.get(userId);
+        if (user) {
+          user.team_id = teamId;
+          user.team_name = teamName;
+        }
+        return { rows: [] };
+      }
+      
+      if (queryLower.includes('update teams')) {
+        // 簡易的なUPDATE処理（メンバー追加）
+        const members = params[0];
+        const teamId = params[1];
+        const team = inMemoryStore.teams.get(teamId);
+        if (team) {
+          team.members = members;
+        }
+        return { rows: [] };
+      }
+      
+      return { rows: [] };
+    }
+  };
+}
 
 // データベース初期化
 const initializeDatabase = async () => {

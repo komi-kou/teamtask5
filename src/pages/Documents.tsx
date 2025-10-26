@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { FileText, MessageSquare, Search, Calendar, Plus, Users, Clock, Edit2, Trash2 } from 'lucide-react';
-import { LocalStorage, STORAGE_KEYS } from '../utils/storage';
-import ApiService from '../services/api';
+import { STORAGE_KEYS } from '../utils/storage';
+import { useDataSync } from '../hooks/useDataSync';
 import './Documents.css';
 
 interface Document {
@@ -49,9 +49,22 @@ interface MeetingMinutes {
 }
 
 const Documents: React.FC = () => {
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [meetingMinutes, setMeetingMinutes] = useState<MeetingMinutes[]>([]);
-  const [teamMembers, setTeamMembers] = useState<{id: number, name: string, role: string}[]>([]);
+  const { data: documents, setData: setDocuments, isLoading: documentsLoading } = useDataSync<Document[]>({
+    storageKey: STORAGE_KEYS.DOCUMENTS_DATA,
+    defaultValue: []
+  });
+  
+  const { data: meetingMinutes, setData: setMeetingMinutes, isLoading: minutesLoading } = useDataSync<MeetingMinutes[]>({
+    storageKey: STORAGE_KEYS.MEETING_MINUTES,
+    defaultValue: []
+  });
+  
+  const { data: teamMembers, setData: setTeamMembers, isLoading: membersLoading, error } = useDataSync<{id: number, name: string, role: string}[]>({
+    storageKey: STORAGE_KEYS.TEAM_MEMBERS,
+    defaultValue: []
+  });
+  
+  const isLoading = documentsLoading || minutesLoading || membersLoading;
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [showMinutesModal, setShowMinutesModal] = useState(false);
   const [editingMinutes, setEditingMinutes] = useState<MeetingMinutes | null>(null);
@@ -67,51 +80,6 @@ const Documents: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
 
-  // データをサーバーから取得
-  const loadDataFromServer = async () => {
-    try {
-      const [docsResponse, minutesResponse, membersResponse] = await Promise.all([
-        ApiService.getData(STORAGE_KEYS.DOCUMENTS_DATA),
-        ApiService.getData(STORAGE_KEYS.MEETING_MINUTES),
-        ApiService.getData(STORAGE_KEYS.TEAM_MEMBERS)
-      ]);
-      
-      // LocalStorageが空の場合のみサーバーのデータを使用
-      if (docsResponse.data && (!LocalStorage.get(STORAGE_KEYS.DOCUMENTS_DATA) || LocalStorage.get(STORAGE_KEYS.DOCUMENTS_DATA)?.length === 0)) {
-        setDocuments(docsResponse.data);
-        LocalStorage.set(STORAGE_KEYS.DOCUMENTS_DATA, docsResponse.data);
-      }
-      if (minutesResponse.data && (!LocalStorage.get(STORAGE_KEYS.MEETING_MINUTES) || LocalStorage.get(STORAGE_KEYS.MEETING_MINUTES)?.length === 0)) {
-        setMeetingMinutes(minutesResponse.data);
-        LocalStorage.set(STORAGE_KEYS.MEETING_MINUTES, minutesResponse.data);
-      }
-      if (membersResponse.data && (!LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS) || LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS)?.length === 0)) {
-        setTeamMembers(membersResponse.data);
-        LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, membersResponse.data);
-      }
-    } catch (error) {
-      console.error('サーバーからのデータ取得エラー:', error);
-    }
-  };
-
-  useEffect(() => {
-    const savedDocs = LocalStorage.get<Document[]>(STORAGE_KEYS.DOCUMENTS_DATA);
-    const savedMinutes = LocalStorage.get<MeetingMinutes[]>(STORAGE_KEYS.MEETING_MINUTES);
-    const savedMembers = LocalStorage.get<{id: number, name: string, role: string}[]>(STORAGE_KEYS.TEAM_MEMBERS);
-    
-    if (savedDocs && savedDocs.length > 0) {
-      setDocuments(savedDocs);
-    }
-    if (savedMinutes && savedMinutes.length > 0) {
-      setMeetingMinutes(savedMinutes);
-    }
-    if (savedMembers && savedMembers.length > 0) {
-      setTeamMembers(savedMembers);
-    }
-    
-    // サーバーからも取得を試みる
-    loadDataFromServer();
-  }, []);
 
 
   const addMeetingMinutes = () => {
@@ -199,10 +167,7 @@ const Documents: React.FC = () => {
       }
       
       setMeetingMinutes(updatedMinutes);
-      LocalStorage.set(STORAGE_KEYS.MEETING_MINUTES, updatedMinutes);
-      
       setDocuments(updatedDocs);
-      LocalStorage.set(STORAGE_KEYS.DOCUMENTS_DATA, updatedDocs);
       
       setNewMinutes({ 
         attendees: [], 
@@ -277,7 +242,6 @@ const Documents: React.FC = () => {
         return doc;
       });
       setDocuments(updatedDocs);
-      LocalStorage.set(STORAGE_KEYS.DOCUMENTS_DATA, updatedDocs);
       setSelectedDoc(updatedDocs.find(d => d.id === selectedDoc.id) || null);
       setNewComment('');
     }
@@ -314,13 +278,11 @@ const Documents: React.FC = () => {
     if (doc && window.confirm(`「${doc.name}」を削除してもよろしいですか？`)) {
       const updatedDocs = documents.filter(d => d.id !== docId);
       setDocuments(updatedDocs);
-      LocalStorage.set(STORAGE_KEYS.DOCUMENTS_DATA, updatedDocs);
       
       // 議事録の場合は会議録も削除（IDで特定）
       if (doc.type === '議事録') {
         const updatedMinutes = meetingMinutes.filter(m => m.id !== docId);
         setMeetingMinutes(updatedMinutes);
-        LocalStorage.set(STORAGE_KEYS.MEETING_MINUTES, updatedMinutes);
       }
       
       if (selectedDoc?.id === docId) {
@@ -335,6 +297,27 @@ const Documents: React.FC = () => {
     const matchesCategory = filterCategory === 'all' || doc.category === filterCategory;
     return matchesSearch && matchesCategory;
   });
+
+  if (isLoading) {
+    return (
+      <div className="documents">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>データを読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="documents">
+        <div className="error-container">
+          <p>エラーが発生しました: {error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="documents">

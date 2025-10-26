@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Mail, Download, Search, Calendar, User, ExternalLink, Edit2, Trash2 } from 'lucide-react';
-import { LocalStorage, STORAGE_KEYS } from '../utils/storage';
+import { STORAGE_KEYS } from '../utils/storage';
+import { useDataSync } from '../hooks/useDataSync';
 import './SalesEmails.css';
 
 interface SalesEmail {
@@ -20,7 +21,10 @@ interface SalesEmail {
 }
 
 const SalesEmails: React.FC = () => {
-  const [emails, setEmails] = useState<SalesEmail[]>([]);
+  const { data: emails, setData: setEmails, isLoading, error } = useDataSync<SalesEmail[]>({
+    storageKey: STORAGE_KEYS.SALES_EMAILS,
+    defaultValue: []
+  });
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<SalesEmail | null>(null);
   const [editingEmail, setEditingEmail] = useState<SalesEmail | null>(null);
@@ -35,12 +39,6 @@ const SalesEmails: React.FC = () => {
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
 
-  useEffect(() => {
-    const savedEmails = LocalStorage.get<SalesEmail[]>(STORAGE_KEYS.SALES_EMAILS);
-    if (savedEmails && savedEmails.length > 0) {
-      setEmails(savedEmails);
-    }
-  }, []);
 
   const addEmail = () => {
     if (newEmail.subject && newEmail.client) {
@@ -88,7 +86,6 @@ const SalesEmails: React.FC = () => {
       }
       
       setEmails(updatedEmails);
-      LocalStorage.set(STORAGE_KEYS.SALES_EMAILS, updatedEmails);
       
       setNewEmail({
         emailType: 'inquiry',
@@ -142,7 +139,6 @@ const SalesEmails: React.FC = () => {
     if (email && window.confirm(`「${email.subject}」のメールを削除してもよろしいですか？`)) {
       const updatedEmails = emails.filter(e => e.id !== emailId);
       setEmails(updatedEmails);
-      LocalStorage.set(STORAGE_KEYS.SALES_EMAILS, updatedEmails);
     }
   };
 
@@ -196,6 +192,27 @@ const SalesEmails: React.FC = () => {
     const matchesStatus = filterStatus === 'all' || email.status === filterStatus;
     return matchesSearch && matchesType && matchesStatus;
   });
+
+  if (isLoading) {
+    return (
+      <div className="sales-emails">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>データを読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="sales-emails">
+        <div className="error-container">
+          <p>エラーが発生しました: {error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="sales-emails">

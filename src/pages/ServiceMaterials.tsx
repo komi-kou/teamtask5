@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, FileText, Download, Search, Calendar, User, Star, Edit2, Trash2 } from 'lucide-react';
-import { LocalStorage, STORAGE_KEYS } from '../utils/storage';
+import { STORAGE_KEYS } from '../utils/storage';
+import { useDataSync } from '../hooks/useDataSync';
 import './ServiceMaterials.css';
 
 interface ServiceMaterial {
@@ -26,7 +27,10 @@ interface ServiceMaterial {
 }
 
 const ServiceMaterials: React.FC = () => {
-  const [materials, setMaterials] = useState<ServiceMaterial[]>([]);
+  const { data: materials, setData: setMaterials, isLoading, error } = useDataSync<ServiceMaterial[]>({
+    storageKey: STORAGE_KEYS.SERVICE_MATERIALS,
+    defaultValue: []
+  });
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState<ServiceMaterial | null>(null);
   const [editingMaterial, setEditingMaterial] = useState<ServiceMaterial | null>(null);
@@ -45,15 +49,6 @@ const ServiceMaterials: React.FC = () => {
   const [filterFileType, setFilterFileType] = useState('all');
   const [filterServiceCategory, setFilterServiceCategory] = useState('all');
 
-  useEffect(() => {
-    const savedMaterials = LocalStorage.get<ServiceMaterial[]>(STORAGE_KEYS.SERVICE_MATERIALS);
-    if (savedMaterials && savedMaterials.length > 0) {
-      console.log('既存のサービス資料を読み込み:', savedMaterials.length, '件');
-      setMaterials(savedMaterials);
-    } else {
-      console.log('保存されたサービス資料なし');
-    }
-  }, []);
 
 
   const addMaterial = () => {
@@ -119,15 +114,6 @@ const ServiceMaterials: React.FC = () => {
       console.log('資料を保存:', updatedMaterials.length, '件');
       setMaterials(updatedMaterials);
       
-      try {
-        LocalStorage.set(STORAGE_KEYS.SERVICE_MATERIALS, updatedMaterials);
-        // 保存確認
-        const saved = LocalStorage.get<ServiceMaterial[]>(STORAGE_KEYS.SERVICE_MATERIALS);
-        console.log('保存後の確認:', saved?.length, '件');
-      } catch (error) {
-        console.error('LocalStorage保存エラー:', error);
-      }
-      
     }
     
     setNewMaterial({
@@ -188,15 +174,6 @@ const ServiceMaterials: React.FC = () => {
       const updatedMaterials = materials.filter(m => m.id !== materialId);
       console.log('資料を保存:', updatedMaterials.length, '件');
       setMaterials(updatedMaterials);
-      
-      try {
-        LocalStorage.set(STORAGE_KEYS.SERVICE_MATERIALS, updatedMaterials);
-        // 保存確認
-        const saved = LocalStorage.get<ServiceMaterial[]>(STORAGE_KEYS.SERVICE_MATERIALS);
-        console.log('保存後の確認:', saved?.length, '件');
-      } catch (error) {
-        console.error('LocalStorage保存エラー:', error);
-      }
     }
   };
 
@@ -205,7 +182,6 @@ const ServiceMaterials: React.FC = () => {
       m.id === material.id ? { ...m, downloadCount: m.downloadCount + 1 } : m
     );
     setMaterials(updatedMaterials);
-    LocalStorage.set(STORAGE_KEYS.SERVICE_MATERIALS, updatedMaterials);
     
     if (material.fileData) {
       const link = document.createElement('a');
@@ -288,6 +264,27 @@ const ServiceMaterials: React.FC = () => {
     const matchesServiceCategory = filterServiceCategory === 'all' || material.serviceCategory === filterServiceCategory;
     return matchesSearch && matchesCategory && matchesFileType && matchesServiceCategory;
   });
+
+  if (isLoading) {
+    return (
+      <div className="service-materials">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>データを読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="service-materials">
+        <div className="error-container">
+          <p>エラーが発生しました: {error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="service-materials">
