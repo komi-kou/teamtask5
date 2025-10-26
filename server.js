@@ -274,7 +274,7 @@ app.get('/api/data/all', authenticateToken, async (req, res) => {
         tasks: data.tasks || [],
         projects: data.projects || [],
         sales: data.sales || [],
-        teamMembers: data.team_members || [],
+        team_members: data.team_members || [],
         meetings: data.meetings || [],
         activities: data.activities || []
       }
