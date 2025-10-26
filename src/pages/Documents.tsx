@@ -109,26 +109,31 @@ const Documents: React.FC = () => {
           m.id === editingMinutes.id ? minutes : m
         );
         
-        // 対応するドキュメントも更新
+        // 対応するドキュメントも更新（IDで特定）
         const docName = `${minutes.title}_議事録`;
-        updatedDocs = documents.map(doc => 
-          doc.name === `${editingMinutes.title}_議事録` 
-            ? {
-                ...doc,
-                name: docName,
-                uploadDate: minutes.date,
-                meetingDate: minutes.date,
-                attendees: minutes.attendees,
-                actionItems: minutes.actionItems
-              }
-            : doc
-        );
+        // editingMinutesのIDをベースにドキュメント名を構築して検索
+        const editingDocName = `${editingMinutes.title}_議事録`;
+        updatedDocs = documents.map(doc => {
+          // 編集対象の議事録ドキュメントをIDベースで特定
+          if (doc.type === '議事録' && doc.name === editingDocName) {
+            return {
+              ...doc,
+              name: docName,
+              uploadDate: minutes.date,
+              meetingDate: minutes.date,
+              attendees: minutes.attendees,
+              actionItems: minutes.actionItems
+            };
+          }
+          return doc;
+        });
         
         setEditingMinutes(null);
       } else {
         // 新規追加モード
+        const newId = Date.now();
         const minutes: MeetingMinutes = {
-          id: Date.now(),
+          id: newId,
           title: newMinutes.title,
           date: newMinutes.date,
           time: newMinutes.time || '',
@@ -146,7 +151,7 @@ const Documents: React.FC = () => {
         
         // ドキュメントとしても追加
         const doc: Document = {
-          id: Date.now(),
+          id: newId, // 議事録IDと同じIDを使用
           name: `${minutes.title}_議事録`,
           type: '議事録',
           size: '1.2 KB',
@@ -248,24 +253,28 @@ const Documents: React.FC = () => {
   };
 
   const editMeetingMinutes = (docName: string) => {
-    const minutesTitle = docName.replace('_議事録', '');
-    const minutes = meetingMinutes.find(m => m.title === minutesTitle);
-    if (minutes) {
-      setEditingMinutes(minutes);
-      setNewMinutes({
-        title: minutes.title,
-        date: minutes.date,
-        time: minutes.time,
-        attendees: minutes.attendees,
-        meetingLink: minutes.meetingLink,
-        meetingType: minutes.meetingType,
-        agenda: minutes.agenda,
-        decisions: minutes.decisions,
-        actionItems: minutes.actionItems,
-        notes: minutes.notes,
-        status: minutes.status
-      });
-      setShowMinutesModal(true);
+    // docNameからドキュメントIDを抽出
+    const doc = documents.find(d => d.name === docName && d.type === '議事録');
+    if (doc) {
+      // ドキュメントIDと同じIDを持つ議事録を検索
+      const minutes = meetingMinutes.find(m => m.id === doc.id);
+      if (minutes) {
+        setEditingMinutes(minutes);
+        setNewMinutes({
+          title: minutes.title,
+          date: minutes.date,
+          time: minutes.time,
+          attendees: minutes.attendees,
+          meetingLink: minutes.meetingLink,
+          meetingType: minutes.meetingType,
+          agenda: minutes.agenda,
+          decisions: minutes.decisions,
+          actionItems: minutes.actionItems,
+          notes: minutes.notes,
+          status: minutes.status
+        });
+        setShowMinutesModal(true);
+      }
     }
   };
 
@@ -276,10 +285,9 @@ const Documents: React.FC = () => {
       setDocuments(updatedDocs);
       LocalStorage.set(STORAGE_KEYS.DOCUMENTS_DATA, updatedDocs);
       
-      // 議事録の場合は会議録も削除
+      // 議事録の場合は会議録も削除（IDで特定）
       if (doc.type === '議事録') {
-        const minutesTitle = doc.name.replace('_議事録', '');
-        const updatedMinutes = meetingMinutes.filter(m => m.title !== minutesTitle);
+        const updatedMinutes = meetingMinutes.filter(m => m.id !== docId);
         setMeetingMinutes(updatedMinutes);
         LocalStorage.set(STORAGE_KEYS.MEETING_MINUTES, updatedMinutes);
       }
