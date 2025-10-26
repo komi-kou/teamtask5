@@ -373,6 +373,17 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
+// 本番環境での静的ファイル配信（フロントエンド）
+if (process.env.NODE_ENV === 'production') {
+  // Reactのビルド成果物を静的ファイルとして配信
+  app.use(express.static(path.join(__dirname, 'build')));
+  
+  // すべてのルートをindex.htmlにフォールバック（React Router対応）
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'build', 'index.html'));
+  });
+}
+
 // Socket.io接続処理
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
