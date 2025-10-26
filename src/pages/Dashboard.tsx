@@ -77,29 +77,34 @@ const Dashboard: React.FC = () => {
       const response = await ApiService.getAllData();
       const serverData = response.data || {};
       
-      // LocalStorageが空の場合のみサーバーのデータを使用
-      // これにより、既存のローカルデータを保持しつつ、別ブラウザでもデータが表示される
-      if (serverData.tasks && (!LocalStorage.get(STORAGE_KEYS.TASKS_DATA) || LocalStorage.get(STORAGE_KEYS.TASKS_DATA)?.length === 0)) {
+      // サーバーのデータを優先的に使用（常に最新の状態を保持）
+      if (serverData.tasks && Array.isArray(serverData.tasks)) {
+        console.log('サーバーからのタスクデータを適用:', serverData.tasks.length, '件');
         setTasks(serverData.tasks);
         LocalStorage.set(STORAGE_KEYS.TASKS_DATA, serverData.tasks);
       }
-      if (serverData.projects && (!LocalStorage.get(STORAGE_KEYS.PROJECTS_DATA) || LocalStorage.get(STORAGE_KEYS.PROJECTS_DATA)?.length === 0)) {
+      if (serverData.projects && Array.isArray(serverData.projects)) {
+        console.log('サーバーからの案件データを適用:', serverData.projects.length, '件');
         setProjects(serverData.projects);
         LocalStorage.set(STORAGE_KEYS.PROJECTS_DATA, serverData.projects);
       }
-      if (serverData.sales && (!LocalStorage.get(STORAGE_KEYS.SALES_DATA) || LocalStorage.get(STORAGE_KEYS.SALES_DATA)?.length === 0)) {
+      if (serverData.sales && Array.isArray(serverData.sales)) {
+        console.log('サーバーからの売上データを適用:', serverData.sales.length, '件');
         setSalesData(serverData.sales);
         LocalStorage.set(STORAGE_KEYS.SALES_DATA, serverData.sales);
       }
-      if (serverData.team_members && (!LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS) || LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS)?.length === 0)) {
+      if (serverData.team_members && Array.isArray(serverData.team_members)) {
+        console.log('サーバーからのチームメンバーデータを適用:', serverData.team_members.length, '件');
         setTeamMembers(serverData.team_members);
         LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, serverData.team_members);
       }
-      if (serverData.meetings && (!LocalStorage.get(STORAGE_KEYS.MEETINGS) || LocalStorage.get(STORAGE_KEYS.MEETINGS)?.length === 0)) {
+      if (serverData.meetings && Array.isArray(serverData.meetings)) {
+        console.log('サーバーからの会議データを適用:', serverData.meetings.length, '件');
         setMeetings(serverData.meetings);
         LocalStorage.set(STORAGE_KEYS.MEETINGS, serverData.meetings);
       }
-      if (serverData.activities && (!LocalStorage.get(STORAGE_KEYS.ACTIVITIES) || LocalStorage.get(STORAGE_KEYS.ACTIVITIES)?.length === 0)) {
+      if (serverData.activities && Array.isArray(serverData.activities)) {
+        console.log('サーバーからのアクティビティデータを適用:', serverData.activities.length, '件');
         setActivities(serverData.activities);
         LocalStorage.set(STORAGE_KEYS.ACTIVITIES, serverData.activities);
       }

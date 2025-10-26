@@ -55,7 +55,8 @@ const Sales: React.FC = () => {
   const loadDataFromServer = async () => {
     try {
       const response = await ApiService.getData(STORAGE_KEYS.LEADS_DATA);
-      if (response.data && (!LocalStorage.get(STORAGE_KEYS.LEADS_DATA) || LocalStorage.get(STORAGE_KEYS.LEADS_DATA)?.length === 0)) {
+      if (response.data && Array.isArray(response.data)) {
+        console.log('サーバーからのリードデータを適用:', response.data.length, '件');
         setLeads(response.data);
         LocalStorage.set(STORAGE_KEYS.LEADS_DATA, response.data);
       }

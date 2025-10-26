@@ -53,13 +53,14 @@ const Tasks: React.FC = () => {
         ApiService.getData(STORAGE_KEYS.TEAM_MEMBERS)
       ]);
       
-      // LocalStorageが空の場合のみサーバーのデータを使用
-      // これにより、既存のローカルデータを保持しつつ、別ブラウザでもデータが表示される
-      if (tasksResponse.data && (!LocalStorage.get(STORAGE_KEYS.TASKS_DATA) || LocalStorage.get(STORAGE_KEYS.TASKS_DATA)?.length === 0)) {
+      // サーバーのデータを優先的に使用（常に最新の状態を保持）
+      if (tasksResponse.data && Array.isArray(tasksResponse.data)) {
+        console.log('サーバーからのデータを適用:', tasksResponse.data.length, '件');
         setTasks(tasksResponse.data);
         LocalStorage.set(STORAGE_KEYS.TASKS_DATA, tasksResponse.data);
       }
-      if (membersResponse.data && (!LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS) || LocalStorage.get(STORAGE_KEYS.TEAM_MEMBERS)?.length === 0)) {
+      if (membersResponse.data && Array.isArray(membersResponse.data)) {
+        console.log('サーバーからのチームメンバーデータを適用:', membersResponse.data.length, '件');
         setTeamMembers(membersResponse.data);
         LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, membersResponse.data);
       }
