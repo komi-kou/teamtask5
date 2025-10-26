@@ -77,24 +77,11 @@ const Dashboard: React.FC = () => {
       const response = await ApiService.getAllData();
       const serverData = response.data || {};
       
-      // サーバーデータをローカル状態に設定
-      if (serverData.salesData) setSalesData(serverData.salesData);
-      if (serverData.teamMembers) setTeamMembers(serverData.teamMembers);
-      if (serverData.meetings) setMeetings(serverData.meetings);
-      if (serverData.activities) setActivities(serverData.activities);
-      if (serverData.projectsData) setProjects(serverData.projectsData);
-      if (serverData.tasksData) setTasks(serverData.tasksData);
+      // サーバーのデータは参考程度に。LocalStorageとのマージはしない
+      // （LocalStorage優先のため、サーバーから取得したデータで上書きしない）
       
-      // ローカルストレージにも保存（オフライン対応）
-      Object.keys(serverData).forEach(key => {
-        if (serverData[key]) {
-          LocalStorage.set(key, serverData[key]);
-        }
-      });
     } catch (error) {
       console.error('サーバーからのデータ取得エラー:', error);
-      // エラーの場合はローカルストレージから読み込み
-      loadDataFromLocal();
     } finally {
       setIsLoading(false);
     }

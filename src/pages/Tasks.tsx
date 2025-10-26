@@ -53,18 +53,11 @@ const Tasks: React.FC = () => {
         ApiService.getData(STORAGE_KEYS.TEAM_MEMBERS)
       ]);
       
-      if (tasksResponse.data) {
-        setTasks(tasksResponse.data);
-        LocalStorage.set(STORAGE_KEYS.TASKS_DATA, tasksResponse.data);
-      }
+      // サーバーのデータは参考程度に。LocalStorageとのマージはしない
+      // （LocalStorage優先のため、サーバーから取得したデータで上書きしない）
       
-      if (membersResponse.data) {
-        setTeamMembers(membersResponse.data);
-        LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, membersResponse.data);
-      }
     } catch (error) {
       console.error('サーバーからのデータ取得エラー:', error);
-      loadDataFromLocal();
     } finally {
       setIsLoading(false);
     }
