@@ -349,9 +349,36 @@ app.post('/api/data/:dataType', authenticateToken, async (req, res) => {
     // データをJSON文字列として保存
     const jsonData = JSON.stringify(data);
     
+    // 既存のteam_dataレコードを取得
+    const existingData = await pool.query('SELECT * FROM team_data WHERE team_id = $1', [teamId]);
+    
+    let updateValues;
+    if (existingData.rows.length > 0) {
+      // 既存レコードがある場合：既存値を保持して対象フィールドだけ更新
+      updateValues = existingData.rows[0];
+      updateValues[fieldName] = jsonData;
+    } else {
+      // 既存レコードがない場合：デフォルト値で初期化して対象フィールドを設定
+      updateValues = {
+        tasks: '[]',
+        projects: '[]',
+        sales: '[]',
+        team_members: '[]',
+        meetings: '[]',
+        activities: '[]'
+      };
+      updateValues[fieldName] = jsonData;
+    }
+    
+    // UPSERT（存在すればUPDATE、なければINSERT）
     await pool.query(
-      `UPDATE team_data SET ${fieldName} = $1 WHERE team_id = $2`,
-      [jsonData, teamId]
+      `INSERT INTO team_data (team_id, tasks, projects, sales, team_members, meetings, activities)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (team_id)
+      DO UPDATE SET tasks = EXCLUDED.tasks, projects = EXCLUDED.projects, sales = EXCLUDED.sales,
+                     team_members = EXCLUDED.team_members, meetings = EXCLUDED.meetings, activities = EXCLUDED.activities`,
+      [teamId, updateValues.tasks, updateValues.projects, updateValues.sales, 
+       updateValues.team_members, updateValues.meetings, updateValues.activities]
     );
 
     // Socket.ioでリアルタイム更新を通知
@@ -408,9 +435,36 @@ io.on('connection', (socket) => {
     const jsonData = JSON.stringify(newData);
     
     try {
+      // 既存のteam_dataレコードを取得
+      const existingData = await pool.query('SELECT * FROM team_data WHERE team_id = $1', [teamId]);
+      
+      let updateValues;
+      if (existingData.rows.length > 0) {
+        // 既存レコードがある場合：既存値を保持して対象フィールドだけ更新
+        updateValues = existingData.rows[0];
+        updateValues[fieldName] = jsonData;
+      } else {
+        // 既存レコードがない場合：デフォルト値で初期化して対象フィールドを設定
+        updateValues = {
+          tasks: '[]',
+          projects: '[]',
+          sales: '[]',
+          team_members: '[]',
+          meetings: '[]',
+          activities: '[]'
+        };
+        updateValues[fieldName] = jsonData;
+      }
+      
+      // UPSERT（存在すればUPDATE、なければINSERT）
       await pool.query(
-        `UPDATE team_data SET ${fieldName} = $1 WHERE team_id = $2`,
-        [jsonData, teamId]
+        `INSERT INTO team_data (team_id, tasks, projects, sales, team_members, meetings, activities)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (team_id)
+        DO UPDATE SET tasks = EXCLUDED.tasks, projects = EXCLUDED.projects, sales = EXCLUDED.sales,
+                       team_members = EXCLUDED.team_members, meetings = EXCLUDED.meetings, activities = EXCLUDED.activities`,
+        [teamId, updateValues.tasks, updateValues.projects, updateValues.sales, 
+         updateValues.team_members, updateValues.meetings, updateValues.activities]
       );
       socket.to(teamId).emit('data-updated', { dataType, data: newData });
     } catch (error) {
