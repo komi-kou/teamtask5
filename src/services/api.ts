@@ -1,8 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
 import { LocalStorage } from '../utils/storage';
 
-const API_URL = process.env.REACT_APP_API_URL || 
-  (window.location.hostname === 'localhost' ? 'http://localhost:3001/api' : '/api');
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
 class ApiService {
   private api: AxiosInstance;

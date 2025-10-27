@@ -269,14 +269,27 @@ app.get('/api/data/all', authenticateToken, async (req, res) => {
     }
 
     const data = dataResult.rows[0];
+    
+    // JSONBデータをパース（文字列の場合のみ）
+    const parseJsonb = (value) => {
+      if (typeof value === 'string') {
+        try {
+          return JSON.parse(value);
+        } catch (e) {
+          return [];
+        }
+      }
+      return value || [];
+    };
+    
     res.json({ 
       data: {
-        tasks: data.tasks || [],
-        projects: data.projects || [],
-        sales: data.sales || [],
-        team_members: data.team_members || [],
-        meetings: data.meetings || [],
-        activities: data.activities || []
+        tasks: parseJsonb(data.tasks),
+        projects: parseJsonb(data.projects),
+        sales: parseJsonb(data.sales),
+        team_members: parseJsonb(data.team_members),
+        meetings: parseJsonb(data.meetings),
+        activities: parseJsonb(data.activities)
       }
     });
   } catch (error) {
@@ -320,7 +333,19 @@ app.get('/api/data/:dataType', authenticateToken, async (req, res) => {
     };
 
     const fieldName = fieldMap[dataType] || dataType;
-    const result = data[fieldName] || [];
+    const rawResult = data[fieldName];
+    
+    // JSONBデータをパース（文字列の場合のみ）
+    let result;
+    if (typeof rawResult === 'string') {
+      try {
+        result = JSON.parse(rawResult);
+      } catch (e) {
+        result = [];
+      }
+    } else {
+      result = rawResult || [];
+    }
     
     res.json({ data: result });
   } catch (error) {

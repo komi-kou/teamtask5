@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { STORAGE_KEYS } from '../utils/storage';
+import { LocalStorage, STORAGE_KEYS } from '../utils/storage';
 import { Plus, Users, Calendar, FileText, CheckCircle, Link, Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useDataSync } from '../hooks/useDataSync';
+import ApiService from '../services/api';
+import SocketService from '../services/socket';
 import './Dashboard.css';
 
 interface TeamMember {
@@ -59,47 +60,172 @@ const Dashboard: React.FC = () => {
   const [newMember, setNewMember] = useState<{ name: string; role: string; status: 'online' | 'offline' | 'away' }>({ name: '', role: '', status: 'offline' });
   const [newMeeting, setNewMeeting] = useState({ title: '', date: '', time: '', link: '', attendees: '' });
   
-  const { data: salesData, setData: setSalesData, isLoading: salesLoading } = useDataSync<SalesRecord[]>({
-    storageKey: STORAGE_KEYS.SALES_DATA,
-    defaultValue: []
-  });
-  
-  const { data: teamMembers, setData: setTeamMembers, isLoading: membersLoading } = useDataSync<TeamMember[]>({
-    storageKey: STORAGE_KEYS.TEAM_MEMBERS,
-    defaultValue: []
-  });
-  
-  const { data: meetings, setData: setMeetings, isLoading: meetingsLoading } = useDataSync<Meeting[]>({
-    storageKey: STORAGE_KEYS.MEETINGS,
-    defaultValue: []
-  });
-  
-  const { data: activities, setData: setActivities, isLoading: activitiesLoading } = useDataSync<Activity[]>({
-    storageKey: STORAGE_KEYS.ACTIVITIES,
-    defaultValue: []
-  });
-  
-  const { data: projects, setData: setProjects, isLoading: projectsLoading } = useDataSync<Project[]>({
-    storageKey: STORAGE_KEYS.PROJECTS_DATA,
-    defaultValue: []
-  });
-  
-  const { data: tasks, setData: setTasks, isLoading: tasksLoading, error } = useDataSync<any[]>({
-    storageKey: STORAGE_KEYS.TASKS_DATA,
-    defaultValue: []
-  });
-  
-  const isLoading = salesLoading || membersLoading || meetingsLoading || activitiesLoading || projectsLoading || tasksLoading;
+  const [salesData, setSalesData] = useState<SalesRecord[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Auto-generate sales data from projects if no sales data exists
-  useEffect(() => {
-    if (projects.length > 0 && salesData.length === 0) {
-      const monthlyRevenue = generateMonthlyRevenueFromProjects(projects);
+  // データをサーバーから取得
+  const loadDataFromServer = async () => {
+    if (!isAuthenticated) return;
+    
+    try {
+      setIsLoading(true);
+      const response = await ApiService.getAllData();
+      const serverData = response.data || {};
+      
+      // サーバーのデータを優先的に使用（常に最新の状態を保持）
+      if (serverData.tasks && Array.isArray(serverData.tasks)) {
+        console.log('サーバーからのタスクデータを適用:', serverData.tasks.length, '件');
+        setTasks(serverData.tasks);
+        LocalStorage.set(STORAGE_KEYS.TASKS_DATA, serverData.tasks);
+      }
+      if (serverData.projects && Array.isArray(serverData.projects)) {
+        console.log('サーバーからの案件データを適用:', serverData.projects.length, '件');
+        setProjects(serverData.projects);
+        LocalStorage.set(STORAGE_KEYS.PROJECTS_DATA, serverData.projects);
+      }
+      if (serverData.sales && Array.isArray(serverData.sales)) {
+        console.log('サーバーからの売上データを適用:', serverData.sales.length, '件');
+        setSalesData(serverData.sales);
+        LocalStorage.set(STORAGE_KEYS.SALES_DATA, serverData.sales);
+      }
+      if (serverData.team_members && Array.isArray(serverData.team_members)) {
+        console.log('サーバーからのチームメンバーデータを適用:', serverData.team_members.length, '件');
+        setTeamMembers(serverData.team_members);
+        LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, serverData.team_members);
+      }
+      if (serverData.meetings && Array.isArray(serverData.meetings)) {
+        console.log('サーバーからの会議データを適用:', serverData.meetings.length, '件');
+        setMeetings(serverData.meetings);
+        LocalStorage.set(STORAGE_KEYS.MEETINGS, serverData.meetings);
+      }
+      if (serverData.activities && Array.isArray(serverData.activities)) {
+        console.log('サーバーからのアクティビティデータを適用:', serverData.activities.length, '件');
+        setActivities(serverData.activities);
+        LocalStorage.set(STORAGE_KEYS.ACTIVITIES, serverData.activities);
+      }
+      
+    } catch (error) {
+      console.error('サーバーからのデータ取得エラー:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ローカルストレージからデータを読み込み
+  const loadDataFromLocal = () => {
+    const savedSales = LocalStorage.get<SalesRecord[]>(STORAGE_KEYS.SALES_DATA);
+    const savedMembers = LocalStorage.get<TeamMember[]>(STORAGE_KEYS.TEAM_MEMBERS);
+    const savedMeetings = LocalStorage.get<Meeting[]>(STORAGE_KEYS.MEETINGS);
+    const savedActivities = LocalStorage.get<Activity[]>(STORAGE_KEYS.ACTIVITIES);
+    const savedProjects = LocalStorage.get<Project[]>(STORAGE_KEYS.PROJECTS_DATA);
+    const savedTasks = LocalStorage.get<any[]>(STORAGE_KEYS.TASKS_DATA);
+    
+    if (savedProjects && savedProjects.length > 0) {
+      setProjects(savedProjects);
+      
+      // 案件データから売上データを自動生成
+      const monthlyRevenue = generateMonthlyRevenueFromProjects(savedProjects);
       if (monthlyRevenue.length > 0) {
         setSalesData(monthlyRevenue);
       }
+    } else if (savedSales && savedSales.length > 0) {
+      setSalesData(savedSales);
     }
-  }, [projects, salesData, setSalesData]);
+    
+    if (savedMembers && savedMembers.length > 0) {
+      setTeamMembers(savedMembers);
+    }
+    if (savedMeetings && savedMeetings.length > 0) {
+      setMeetings(savedMeetings);
+    }
+    if (savedActivities && savedActivities.length > 0) {
+      setActivities(savedActivities);
+    }
+    if (savedTasks && savedTasks.length > 0) {
+      setTasks(savedTasks);
+    }
+  };
+
+  // データをサーバーに保存
+  const saveDataToServer = async (dataType: string, data: any) => {
+    if (!isAuthenticated) {
+      console.warn('認証されていないため、サーバーへの保存をスキップ');
+      return;
+    }
+    
+    try {
+      console.log('サーバーへの保存を開始:', dataType, data.length || 'N/A', '件');
+      const result = await ApiService.saveData(dataType, data);
+      console.log('サーバーへの保存が成功しました:', dataType);
+      return result;
+    } catch (error: any) {
+      console.error('サーバーへのデータ保存エラー:', error);
+      console.error('エラー詳細:', error.response?.data || error.message);
+      // エラーを再スローして上位に伝播
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    // まずLocalStorageから読み込む
+    loadDataFromLocal();
+    setIsLoading(false);
+    
+    if (isAuthenticated) {
+      // サーバーからも取得を試みる（バックグラウンド）
+      loadDataFromServer();
+      
+      // Socket.io接続
+      if (user?.teamId) {
+        SocketService.connect(user.teamId);
+        
+        // リアルタイム更新のリスナーを設定（他のユーザーの変更のみ適用）
+        const handleDataUpdate = (data: any) => {
+          console.log('Real-time data update:', data);
+          const { dataType, data: newData, userId } = data;
+          
+          // 現在のユーザー自身の変更は無視（LocalStorage優先）
+          if (userId === user?.userId) {
+            return;
+          }
+          
+          // データタイプに応じて状態を更新
+          switch (dataType) {
+            case STORAGE_KEYS.SALES_DATA:
+              setSalesData(newData);
+              break;
+            case STORAGE_KEYS.TEAM_MEMBERS:
+              setTeamMembers(newData);
+              break;
+            case STORAGE_KEYS.MEETINGS:
+              setMeetings(newData);
+              break;
+            case STORAGE_KEYS.ACTIVITIES:
+              setActivities(newData);
+              break;
+            case STORAGE_KEYS.PROJECTS_DATA:
+              setProjects(newData);
+              break;
+            case STORAGE_KEYS.TASKS_DATA:
+              setTasks(newData);
+              break;
+          }
+        };
+        
+        SocketService.on('dataUpdated', handleDataUpdate);
+        
+        // クリーンアップ関数
+        return () => {
+          SocketService.off('dataUpdated', handleDataUpdate);
+        };
+      }
+    }
+  }, [isAuthenticated, user?.teamId]);
 
   // 案件データから月別売上を生成
   const generateMonthlyRevenueFromProjects = (projects: Project[]) => {
@@ -128,10 +254,18 @@ const Dashboard: React.FC = () => {
     });
   };
 
-  const addSalesData = () => {
+  const addSalesData = async () => {
     if (newSales.month && newSales.sales > 0) {
       const updatedSales = [...salesData, newSales];
       setSalesData(updatedSales);
+      LocalStorage.set(STORAGE_KEYS.SALES_DATA, updatedSales);
+      
+      // サーバーに保存
+      try {
+        await saveDataToServer(STORAGE_KEYS.SALES_DATA, updatedSales);
+      } catch (error) {
+        console.error('売上データの保存に失敗しましたが、LocalStorageには保存済みです');
+      }
       
       setNewSales({ month: '', sales: 0, target: 0 });
       setShowSalesModal(false);
@@ -147,10 +281,18 @@ const Dashboard: React.FC = () => {
       };
       const updatedActivities = [activity, ...activities.slice(0, 9)];
       setActivities(updatedActivities);
+      LocalStorage.set(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+      
+      // アクティビティもサーバーに保存
+      try {
+        await saveDataToServer(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+      } catch (error) {
+        console.error('アクティビティの保存に失敗しましたが、LocalStorageには保存済みです');
+      }
     }
   };
 
-  const addTeamMember = () => {
+  const addTeamMember = async () => {
     if (editingMember) {
       // 編集モード
       const updatedMembers = teamMembers.map(m => 
@@ -159,9 +301,14 @@ const Dashboard: React.FC = () => {
           : m
       );
       setTeamMembers(updatedMembers);
+      LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
       
       // サーバーに保存
-      saveDataToServer(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
+      try {
+        await saveDataToServer(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
+      } catch (error) {
+        console.error('チームメンバーの更新に失敗しましたが、LocalStorageには保存済みです');
+      }
       
       // アクティビティに追加
       const activity: Activity = {
@@ -174,9 +321,14 @@ const Dashboard: React.FC = () => {
       };
       const updatedActivities = [activity, ...activities.slice(0, 9)];
       setActivities(updatedActivities);
+      LocalStorage.set(STORAGE_KEYS.ACTIVITIES, updatedActivities);
       
       // アクティビティもサーバーに保存
-      saveDataToServer(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+      try {
+        await saveDataToServer(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+      } catch (error) {
+        console.error('アクティビティの保存に失敗しましたが、LocalStorageには保存済みです');
+      }
       
       setEditingMember(null);
     } else {
@@ -193,7 +345,11 @@ const Dashboard: React.FC = () => {
         LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
         
         // サーバーに保存
-        saveDataToServer(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
+        try {
+          await saveDataToServer(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
+        } catch (error) {
+          console.error('チームメンバーの追加に失敗しましたが、LocalStorageには保存済みです');
+        }
         
         // アクティビティに追加
         const activity: Activity = {
@@ -209,7 +365,11 @@ const Dashboard: React.FC = () => {
         LocalStorage.set(STORAGE_KEYS.ACTIVITIES, updatedActivities);
         
         // アクティビティもサーバーに保存
-        saveDataToServer(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+        try {
+          await saveDataToServer(STORAGE_KEYS.ACTIVITIES, updatedActivities);
+        } catch (error) {
+          console.error('アクティビティの保存に失敗しましたが、LocalStorageには保存済みです');
+        }
       }
     }
     
@@ -232,6 +392,7 @@ const Dashboard: React.FC = () => {
     if (member && window.confirm(`${member.name}を削除してもよろしいですか？`)) {
       const updatedMembers = teamMembers.filter(m => m.id !== memberId);
       setTeamMembers(updatedMembers);
+      LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, updatedMembers);
       
       // アクティビティに追加
       const activity: Activity = {
@@ -243,6 +404,7 @@ const Dashboard: React.FC = () => {
       };
       const updatedActivities = [activity, ...activities.slice(0, 9)];
       setActivities(updatedActivities);
+      LocalStorage.set(STORAGE_KEYS.ACTIVITIES, updatedActivities);
     }
   };
 
@@ -259,6 +421,7 @@ const Dashboard: React.FC = () => {
       };
       const updatedMeetings = [...meetings, meeting];
       setMeetings(updatedMeetings);
+      LocalStorage.set(STORAGE_KEYS.MEETINGS, updatedMeetings);
       setNewMeeting({ title: '', date: '', time: '', link: '', attendees: '' });
       setShowMeetingModal(false);
       
@@ -273,6 +436,7 @@ const Dashboard: React.FC = () => {
       };
       const updatedActivities = [activity, ...activities.slice(0, 9)];
       setActivities(updatedActivities);
+      LocalStorage.set(STORAGE_KEYS.ACTIVITIES, updatedActivities);
     }
   };
 
@@ -317,21 +481,9 @@ const Dashboard: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="dashboard">
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p>データを読み込み中...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="dashboard">
-        <div className="error-container">
-          <p>エラーが発生しました: {error}</p>
-        </div>
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
+        <p>データを読み込み中...</p>
       </div>
     );
   }

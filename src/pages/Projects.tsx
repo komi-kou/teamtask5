@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Calendar, Users, DollarSign, Clock, CheckCircle, AlertCircle, ExternalLink, Edit2, Trash2 } from 'lucide-react';
-import { STORAGE_KEYS } from '../utils/storage';
-import { useDataSync } from '../hooks/useDataSync';
+import { LocalStorage, STORAGE_KEYS } from '../utils/storage';
+import ApiService from '../services/api';
 import './Projects.css';
 
 interface Project {
@@ -35,16 +35,8 @@ interface Deliverable {
 }
 
 const Projects: React.FC = () => {
-  const { data: projects, setData: setProjects, isLoading } = useDataSync<Project[]>({
-    storageKey: STORAGE_KEYS.PROJECTS_DATA,
-    defaultValue: []
-  });
-  
-  const { data: teamMembers } = useDataSync<{id: number, name: string, role: string}[]>({
-    storageKey: STORAGE_KEYS.TEAM_MEMBERS,
-    defaultValue: []
-  });
-  
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [teamMembers, setTeamMembers] = useState<{id: number, name: string, role: string}[]>([]);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [showDeliverableModal, setShowDeliverableModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -61,6 +53,45 @@ const Projects: React.FC = () => {
   const [newDeliverable, setNewDeliverable] = useState<Partial<Deliverable>>({
     status: 'pending'
   });
+
+  // データをサーバーから取得
+  const loadDataFromServer = async () => {
+    try {
+      const [projectsResponse, membersResponse] = await Promise.all([
+        ApiService.getData(STORAGE_KEYS.PROJECTS_DATA),
+        ApiService.getData(STORAGE_KEYS.TEAM_MEMBERS)
+      ]);
+      
+      // サーバーのデータを優先的に使用（常に最新の状態を保持）
+      if (projectsResponse.data && Array.isArray(projectsResponse.data)) {
+        console.log('サーバーからの案件データを適用:', projectsResponse.data.length, '件');
+        setProjects(projectsResponse.data);
+        LocalStorage.set(STORAGE_KEYS.PROJECTS_DATA, projectsResponse.data);
+      }
+      if (membersResponse.data && Array.isArray(membersResponse.data)) {
+        console.log('サーバーからのチームメンバーデータを適用:', membersResponse.data.length, '件');
+        setTeamMembers(membersResponse.data);
+        LocalStorage.set(STORAGE_KEYS.TEAM_MEMBERS, membersResponse.data);
+      }
+    } catch (error) {
+      console.error('サーバーからのデータ取得エラー:', error);
+    }
+  };
+
+  useEffect(() => {
+    const savedProjects = LocalStorage.get<Project[]>(STORAGE_KEYS.PROJECTS_DATA);
+    const savedMembers = LocalStorage.get<{id: number, name: string, role: string}[]>(STORAGE_KEYS.TEAM_MEMBERS);
+    
+    if (savedProjects && savedProjects.length > 0) {
+      setProjects(savedProjects);
+    }
+    if (savedMembers && savedMembers.length > 0) {
+      setTeamMembers(savedMembers);
+    }
+    
+    // サーバーからも取得を試みる
+    loadDataFromServer();
+  }, []);
 
   const addProject = () => {
     if (newProject.name && newProject.client && newProject.startDate) {
@@ -112,6 +143,7 @@ const Projects: React.FC = () => {
       }
       
       setProjects(updatedProjects);
+      LocalStorage.set(STORAGE_KEYS.PROJECTS_DATA, updatedProjects);
       
       setNewProject({
         status: 'planning',
@@ -144,6 +176,7 @@ const Projects: React.FC = () => {
       );
       
       setProjects(updatedProjects);
+      LocalStorage.set(STORAGE_KEYS.PROJECTS_DATA, updatedProjects);
       setSelectedProject({ ...selectedProject, deliverables: [...selectedProject.deliverables, deliverable] });
       setNewDeliverable({ status: 'pending' });
       setShowDeliverableModal(false);
@@ -209,6 +242,7 @@ const Projects: React.FC = () => {
     if (project && window.confirm(`「${project.name}」の案件を削除してもよろしいですか？`)) {
       const updatedProjects = projects.filter(p => p.id !== projectId);
       setProjects(updatedProjects);
+      LocalStorage.set(STORAGE_KEYS.PROJECTS_DATA, updatedProjects);
     }
   };
 
@@ -246,15 +280,6 @@ const Projects: React.FC = () => {
       default: return status;
     }
   };
-
-  if (isLoading) {
-    return (
-      <div className="loading-container">
-        <div className="loading-spinner"></div>
-        <p>データを読み込み中...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="projects">

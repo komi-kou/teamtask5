@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, DollarSign, Users, Target, Plus, Edit2, Trash2 } from 'lucide-react';
-import { STORAGE_KEYS } from '../utils/storage';
-import { useDataSync } from '../hooks/useDataSync';
+import { LocalStorage, STORAGE_KEYS } from '../utils/storage';
+import ApiService from '../services/api';
 import './Sales.css';
 
 interface Lead {
@@ -49,12 +49,31 @@ const Sales: React.FC = () => {
     status: 'proposed',
     category: 'other'
   });
-  
-  const { data: leads, setData: setLeads, isLoading, error } = useDataSync<Lead[]>({
-    storageKey: STORAGE_KEYS.LEADS_DATA,
-    defaultValue: []
-  });
+  const [leads, setLeads] = useState<Lead[]>([]);
 
+  // データをサーバーから取得
+  const loadDataFromServer = async () => {
+    try {
+      const response = await ApiService.getData(STORAGE_KEYS.LEADS_DATA);
+      if (response.data && Array.isArray(response.data)) {
+        console.log('サーバーからのリードデータを適用:', response.data.length, '件');
+        setLeads(response.data);
+        LocalStorage.set(STORAGE_KEYS.LEADS_DATA, response.data);
+      }
+    } catch (error) {
+      console.error('サーバーからのデータ取得エラー:', error);
+    }
+  };
+
+  useEffect(() => {
+    const savedLeads = LocalStorage.get<Lead[]>(STORAGE_KEYS.LEADS_DATA);
+    if (savedLeads && savedLeads.length > 0) {
+      setLeads(savedLeads);
+    }
+    
+    // サーバーからも取得を試みる
+    loadDataFromServer();
+  }, []);
 
   const addLead = () => {
     if (newLead.company && newLead.contact && newLead.value) {
@@ -106,6 +125,7 @@ const Sales: React.FC = () => {
       }
       
       setLeads(updatedLeads);
+      LocalStorage.set(STORAGE_KEYS.LEADS_DATA, updatedLeads);
       setNewLead({ 
         probability: 50, 
         services: [], 
@@ -135,6 +155,7 @@ const Sales: React.FC = () => {
       );
       
       setLeads(updatedLeads);
+      LocalStorage.set(STORAGE_KEYS.LEADS_DATA, updatedLeads);
       setSelectedLead({ ...selectedLead, services: [...selectedLead.services, service] });
       setNewService({ status: 'proposed', category: 'other' });
       setShowServiceModal(false);
@@ -167,6 +188,7 @@ const Sales: React.FC = () => {
     if (lead && window.confirm(`「${lead.company}」の顧客情報を削除してもよろしいですか？`)) {
       const updatedLeads = leads.filter(l => l.id !== leadId);
       setLeads(updatedLeads);
+      LocalStorage.set(STORAGE_KEYS.LEADS_DATA, updatedLeads);
     }
   };
 
@@ -248,27 +270,6 @@ const Sales: React.FC = () => {
     });
     return acc;
   }, {} as Record<string, { count: number; revenue: number; accepted: number }>);
-
-  if (isLoading) {
-    return (
-      <div className="sales">
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p>データを読み込み中...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="sales">
-        <div className="error-container">
-          <p>エラーが発生しました: {error}</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="sales">
